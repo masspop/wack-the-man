@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Wack The Man</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="title-screen" class="title-screen">
+        <div class="title-card">
+          <p class="eyebrow">yan kaydır · vur · keşfet</p>
+          <h1>WACK THE MAN</h1>
+          <p class="tagline">
+            Kardeşin kayboldu. Köyden ormana, harabelere… kapıyı aç, kuleye çık.
+          </p>
+          <button type="button" id="btn-start">OYUNA GİR</button>
+          <p class="controls-hint">
+            ←→ / WASD hareket · Z / Space zıpla · X vur · C iksir · R yeniden
+          </p>
+        </div>
+      </div>
+
+      <div id="wrap">
+        <div id="hud" aria-live="polite">
+          <div class="hud-left">
+            <div class="hp-row">
+              <span class="label">CAN</span>
+              <div class="hp-bar"><div id="hp-fill"></div></div>
+            </div>
+            <div id="zone-name">Köy Kenarı</div>
+          </div>
+          <div class="hud-inv">
+            <div class="slot" title="Jeton">
+              <span class="ico coin"></span>
+              <span id="coin-count">0</span>
+            </div>
+            <div class="slot" title="İksir">
+              <span class="ico potion"></span>
+              <span id="potion-count">0</span>
+            </div>
+            <div id="key-slot" class="slot badge" title="Anahtar">
+              <span class="ico key"></span>
+            </div>
+            <div id="medal-slot" class="slot badge" title="Medalyon">
+              <span class="ico medal"></span>
+            </div>
+          </div>
+        </div>
+
+        <canvas id="game" width="960" height="540"></canvas>
+        <div id="story"></div>
+
+        <div id="overlay" aria-hidden="true">
+          <div class="overlay-card">
+            <h2 id="overlay-title"></h2>
+            <p id="overlay-text"></p>
+            <button type="button" id="btn-restart">Yeniden</button>
+          </div>
+        </div>
+
+        <div id="pad" aria-label="Dokunmatik kontroller">
+          <div class="pad-left">
+            <button type="button" id="btn-left">◀</button>
+            <button type="button" id="btn-right">▶</button>
+          </div>
+          <div class="pad-right">
+            <button type="button" id="btn-potion" class="btn-item">İksir</button>
+            <button type="button" id="btn-jump" class="btn-jump">Zıpla</button>
+            <button type="button" id="btn-punch" class="btn-atk">Vur</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
