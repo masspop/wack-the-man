@@ -1,5 +1,4 @@
 @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Sans:wght@400;600;700&display=swap");
-
 :root {
   --bg0: #070b14;
   --bg1: #121a2c;
@@ -13,13 +12,11 @@
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   background: var(--bg0);
 }
-
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
-
 html,
 body {
   margin: 0;
@@ -29,7 +26,6 @@ body {
     radial-gradient(ellipse 80% 50% at 50% -10%, #243552 0%, transparent 55%),
     radial-gradient(ellipse at bottom, #1a1018 0%, var(--bg0) 60%);
 }
-
 #app {
   height: 100%;
   display: grid;
@@ -37,8 +33,6 @@ body {
   padding: 0.5rem;
   position: relative;
 }
-
-/* —— Title —— */
 .title-screen {
   position: absolute;
   inset: 0;
@@ -50,13 +44,11 @@ body {
     radial-gradient(circle at 30% 20%, #3d5a80 0%, transparent 45%);
   transition: opacity 0.35s ease, visibility 0.35s;
 }
-
 .title-screen.hidden {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
 }
-
 .title-card {
   width: min(520px, 92vw);
   text-align: center;
@@ -68,7 +60,6 @@ body {
     0 20px 50px rgba(0, 0, 0, 0.5);
   animation: titleIn 0.55s ease-out;
 }
-
 @keyframes titleIn {
   from {
     opacity: 0;
@@ -79,7 +70,6 @@ body {
     transform: none;
   }
 }
-
 .eyebrow {
   margin: 0 0 0.75rem;
   font-size: 0.7rem;
@@ -87,7 +77,6 @@ body {
   text-transform: uppercase;
   color: #9ad1ff;
 }
-
 .title-card h1 {
   margin: 0;
   font-family: "Press Start 2P", monospace;
@@ -98,7 +87,6 @@ body {
   text-shadow: 3px 3px 0 #111;
   animation: brandPulse 2.8s ease-in-out infinite;
 }
-
 @keyframes brandPulse {
   0%,
   100% {
@@ -108,14 +96,12 @@ body {
     filter: brightness(1.12);
   }
 }
-
 .tagline {
   margin: 1.15rem 0 1.5rem;
   color: #d7dde8;
   line-height: 1.55;
   font-size: 0.98rem;
 }
-
 #btn-start,
 #btn-restart {
   border: 3px solid #111;
@@ -127,26 +113,21 @@ body {
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s;
 }
-
 #btn-start:hover,
 #btn-restart:hover {
   background: #ffe066;
   transform: translateY(-2px);
 }
-
 #btn-start:active,
 #btn-restart:active {
   transform: translateY(1px);
 }
-
 .controls-hint {
   margin: 1.1rem 0 0;
   font-size: 0.78rem;
   color: #8a93a8;
   line-height: 1.4;
 }
-
-/* —— Game wrap —— */
 #wrap {
   width: min(960px, 100%);
   display: none;
@@ -154,12 +135,10 @@ body {
   gap: 0.4rem;
   position: relative;
 }
-
 #wrap.playing {
   display: flex;
   animation: wrapIn 0.4s ease;
 }
-
 @keyframes wrapIn {
   from {
     opacity: 0;
@@ -168,7 +147,6 @@ body {
     opacity: 1;
   }
 }
-
 #hud {
   display: flex;
   justify-content: space-between;
@@ -177,48 +155,64 @@ body {
   padding: 0 0.15rem;
   font-size: 12px;
 }
-
 .hud-left {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   min-width: 0;
 }
-
 .hp-row {
   display: flex;
   align-items: center;
   gap: 0.45rem;
 }
-
 .hp-row .label {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   color: #ff8a8a;
 }
-
 .hp-bar {
-  width: min(180px, 38vw);
+  width: min(160px, 32vw);
   height: 12px;
   background: #1a1010;
   border: 2px solid #4a2020;
   overflow: hidden;
 }
-
 #hp-fill {
   height: 100%;
   width: 100%;
   background: linear-gradient(90deg, #e04040, #ff7a5c);
   transition: width 0.2s ease;
 }
-
+#hp-text {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #ffb0b0;
+  min-width: 2.5rem;
+}
 #zone-name {
   font-family: "Press Start 2P", monospace;
   font-size: 9px;
   color: #9ad1ff;
   letter-spacing: 0.04em;
 }
-
+.hud-mid {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+.weapon-slot {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  padding: 0.35rem 0.6rem;
+  background: rgba(20, 28, 46, 0.9);
+  border: 2px solid #c9a227;
+  color: #f5c518;
+  white-space: nowrap;
+}
+#ammo-text {
+  color: #9ad1ff;
+}
 .hud-inv {
   display: flex;
   gap: 0.45rem;
@@ -226,7 +220,6 @@ body {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-
 .slot {
   display: inline-flex;
   align-items: center;
@@ -238,36 +231,30 @@ body {
   font-size: 9px;
   min-height: 28px;
 }
-
 .slot.badge {
   opacity: 0.35;
   filter: grayscale(1);
 }
-
 .slot.badge.owned {
   opacity: 1;
   filter: none;
   border-color: var(--gold);
 }
-
 .ico {
   display: inline-block;
   width: 12px;
   height: 12px;
   image-rendering: pixelated;
 }
-
 .ico.coin {
   background: #ffd76a;
   border-radius: 50%;
   box-shadow: inset -2px -2px 0 #c9a227;
 }
-
 .ico.potion {
   background: var(--mint);
   clip-path: polygon(30% 0, 70% 0, 70% 25%, 85% 100%, 15% 100%, 30% 25%);
 }
-
 .ico.key {
   background: var(--gold);
   width: 14px;
@@ -275,12 +262,10 @@ body {
   border-radius: 2px;
   position: relative;
 }
-
 .ico.medal {
   background: radial-gradient(circle, #ffe08a 40%, #9ad0ff 70%);
   border-radius: 50%;
 }
-
 #game {
   width: 100%;
   height: auto;
@@ -293,7 +278,6 @@ body {
     0 12px 40px rgba(0, 0, 0, 0.45);
   display: block;
 }
-
 #story {
   position: absolute;
   left: 50%;
@@ -312,12 +296,77 @@ body {
   transition: opacity 0.25s ease, transform 0.25s ease;
   z-index: 5;
 }
-
 #story.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
-
+#hint-toast {
+  position: absolute;
+  left: 50%;
+  top: 58px;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.7rem;
+  background: rgba(10, 14, 24, 0.85);
+  border: 2px solid #3d5a80;
+  color: #9ad1ff;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 6;
+  transition: opacity 0.2s;
+}
+#hint-toast.show {
+  opacity: 1;
+}
+#dialog {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  width: min(92%, 720px);
+  padding: 0.85rem 1rem 0.7rem;
+  background: rgba(8, 10, 18, 0.94);
+  border: 3px solid #f5c518;
+  box-shadow: 0 0 0 2px #111;
+  z-index: 15;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+#dialog.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  animation: dialogPop 0.18s ease-out;
+}
+@keyframes dialogPop {
+  from {
+    transform: translateX(-50%) translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+.dialog-name {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: #f5c518;
+  margin-bottom: 0.45rem;
+}
+.dialog-text {
+  color: #f4f0e6;
+  font-size: 15px;
+  line-height: 1.45;
+  min-height: 2.6em;
+}
+.dialog-hint {
+  margin-top: 0.55rem;
+  font-size: 11px;
+  color: #8a93a8;
+  text-align: right;
+}
 #overlay {
   position: absolute;
   inset: 0;
@@ -329,12 +378,10 @@ body {
   transition: opacity 0.25s, visibility 0.25s;
   z-index: 20;
 }
-
 #overlay.show {
   opacity: 1;
   visibility: visible;
 }
-
 .overlay-card {
   width: min(400px, 90%);
   text-align: center;
@@ -342,7 +389,6 @@ body {
   background: var(--panel);
   border: 4px solid var(--line);
 }
-
 .overlay-card h2 {
   margin: 0 0 0.75rem;
   font-family: "Press Start 2P", monospace;
@@ -350,13 +396,11 @@ body {
   color: var(--gold);
   line-height: 1.5;
 }
-
 .overlay-card p {
   margin: 0 0 1.2rem;
   color: #c8d0dc;
   line-height: 1.5;
 }
-
 #pad {
   display: none;
   justify-content: space-between;
@@ -364,13 +408,11 @@ body {
   gap: 0.75rem;
   padding: 0.15rem 0.2rem 0.4rem;
 }
-
 .pad-left,
 .pad-right {
   display: flex;
   gap: 0.45rem;
 }
-
 #pad button {
   min-width: 58px;
   min-height: 52px;
@@ -383,11 +425,9 @@ body {
   font-weight: 700;
   cursor: pointer;
 }
-
 #pad button:active {
   filter: brightness(1.25);
 }
-
 .btn-jump {
   background: #27ae60 !important;
 }
@@ -397,17 +437,17 @@ body {
 .btn-item {
   background: #2a6a4a !important;
 }
-
+.btn-enter {
+  background: #3d5a80 !important;
+}
 @media (max-width: 820px), (pointer: coarse) {
   #pad {
     display: flex;
   }
-
   #story {
     bottom: 120px;
     font-size: 12px;
   }
-
   #hud {
     flex-wrap: wrap;
   }
