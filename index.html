@@ -13,26 +13,32 @@
     <div id="app">
       <div id="title-screen" class="title-screen">
         <div class="title-card">
-          <p class="eyebrow">yan kaydır · vur · keşfet</p>
+          <p class="eyebrow">yan kaydır · savaş · keşfet</p>
           <h1>WACK THE MAN</h1>
           <p class="tagline">
-            Kardeşin kayboldu. Köyden ormana, harabelere… kapıyı aç, kuleye çık.
+            Kardeşin kayboldu. Evlere gir, silah bul, barlardan geç… kuleye çık.
           </p>
           <button type="button" id="btn-start">OYUNA GİR</button>
           <p class="controls-hint">
-            ←→ / WASD hareket · Z / Space zıpla · X vur · C iksir · R yeniden
+            ←→ hareket · Z/Space zıpla · X saldır · ↑/E kapı · C iksir · R yeniden
           </p>
         </div>
       </div>
-
       <div id="wrap">
         <div id="hud" aria-live="polite">
           <div class="hud-left">
             <div class="hp-row">
               <span class="label">CAN</span>
               <div class="hp-bar"><div id="hp-fill"></div></div>
+              <span id="hp-text">1000</span>
             </div>
             <div id="zone-name">Köy Kenarı</div>
+          </div>
+          <div class="hud-mid">
+            <div id="weapon-slot" class="weapon-slot">
+              <span id="weapon-name">Yumruk</span>
+              <span id="ammo-text"></span>
+            </div>
           </div>
           <div class="hud-inv">
             <div class="slot" title="Jeton">
@@ -51,10 +57,14 @@
             </div>
           </div>
         </div>
-
         <canvas id="game" width="960" height="540"></canvas>
+        <div id="dialog" aria-hidden="true">
+          <div class="dialog-name" id="dialog-name"></div>
+          <div class="dialog-text" id="dialog-text"></div>
+          <div class="dialog-hint">X / Enter — devam</div>
+        </div>
         <div id="story"></div>
-
+        <div id="hint-toast"></div>
         <div id="overlay" aria-hidden="true">
           <div class="overlay-card">
             <h2 id="overlay-title"></h2>
@@ -62,11 +72,11 @@
             <button type="button" id="btn-restart">Yeniden</button>
           </div>
         </div>
-
         <div id="pad" aria-label="Dokunmatik kontroller">
           <div class="pad-left">
             <button type="button" id="btn-left">◀</button>
             <button type="button" id="btn-right">▶</button>
+            <button type="button" id="btn-enter" class="btn-enter">Kapı</button>
           </div>
           <div class="pad-right">
             <button type="button" id="btn-potion" class="btn-item">İksir</button>
