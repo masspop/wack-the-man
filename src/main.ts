@@ -1399,3 +1399,2719 @@ function spawnAllies(atX?: number, atY?: number) {
     });
   }
   burst(ox + 20, oy + 10, "#ff7ad9", 22);
+## `src/main.ts` — Parça B (2/3)
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      x: ox + 20,
+      y: oy,
+      vx: (Math.random() - 0.5) * 200,
+      vy: -Math.random() * 180 - 40,
+      life: 0.5 + Math.random() * 0.4,
+      color: "#ff7ad9",
+      size: 3 + Math.random() * 3,
+    });
+  }
+  showStory("Splındog! 2 asalı müttefik çağırıldı.");
+  beep(760, 0.1, "sine", 0.04);
+}
+
+function throwPotionBottle(id: PotionId) {
+  const color = POTIONS[id].color;
+  let tx = player.x + player.w / 2 + facing * 40;
+  let ty = player.y + 8;
+  if (id === "purple") {
+    const drop = nearestGroundDrop(220);
+    if (drop) {
+      tx = drop.x + drop.w / 2;
+      ty = drop.y - 10;
+    } else {
+      tx = player.x + facing * 90;
+      ty = GROUND_Y - 30;
+    }
+  } else if (id === "pink") {
+    tx = player.x + facing * 70;
+    ty = GROUND_Y - 24;
+  }
+  const startX = player.x + (facing > 0 ? player.w : -10);
+  const startY = player.y + 12;
+  const dx = tx - startX;
+  const dy = ty - startY;
+  thrownBottles.push({
+    id,
+    x: startX,
+    y: startY,
+    vx: dx * 2.4 + facing * 40,
+    vy: Math.min(-120, dy * 2.2 - 180),
+    w: 12,
+    h: 16,
+    color,
+    life: 2.2,
+    spin: 0,
+    alive: true,
+  });
+  // throw arm burst
+  burst(startX, startY, color, 6);
+  beep(300, 0.06, "triangle", 0.025);
+  showHint(
+    id === "poison"
+      ? "Krypton atıldı!"
+      : id === "purple"
+        ? "Enchant atıldı!"
+        : "Splındog atıldı!",
+  );
+}
+
+function applyDrinkEffect(id: PotionId) {
+  if (id === "heal") {
+    const heal = rand(200, 350);
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    burst(player.x + player.w / 2, player.y + 10, "#7dffb3", 16);
+    sfxPickup();
+    showStory(`Recovery. (+${heal})`);
+  } else if (id === "fly") {
+    flyTimer = 5;
+    burst(player.x + player.w / 2, player.y + 10, "#4aa8ff", 18);
+    beep(520, 0.12, "sine", 0.04);
+    showStory("Pigeon! 5 saniye uçuş.");
+  } else if (id === "yellow") {
+    invisTimer = 8;
+    burst(player.x + player.w / 2, player.y + 10, "#ffd24a", 18);
+    beep(640, 0.1, "triangle", 0.035);
+    showStory("TheReeker! 8 sn görünmezlik.");
+  }
+  updateHud();
+}
+
+function onBottleLand(b: ThrownBottle) {
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  burst(cx, cy, b.color, 16);
+  beep(180, 0.08, "sawtooth", 0.03);
+
+  if (b.id === "poison") {
+    // splash damage zone — hit nearby enemies
+    let hitAny = false;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      if (Math.hypot(e.x + e.w / 2 - cx, e.y + e.h / 2 - cy) < 70) {
+        damageEnemy(e, rand(250, 300), cx);
+        hitAny = true;
+      }
+    }
+    // also leave a short-lived hostile splash if nothing? keep as friendly splash only
+    if (!hitAny) {
+      spawnProjectile("poison", cx, cy - 4, facing * 80, -40, rand(250, 300), 0.8, false, 14, 10);
+    }
+    showStory("Krypton patladı!");
+  } else if (b.id === "purple") {
+    if (!pourEnchantAt(cx, cy)) {
+      // failed — purple puddle FX only
+      for (let i = 0; i < 12; i++) {
+        particles.push({
+          x: cx,
+          y: cy,
+          vx: (Math.random() - 0.5) * 120,
+          vy: -Math.random() * 100,
+          life: 0.6,
+          color: "#b44dff",
+          size: 2 + Math.random() * 3,
+        });
+      }
+    }
+  } else if (b.id === "pink") {
+    spawnAllies(cx - 20, Math.min(cy, GROUND_Y - 40));
+  }
+}
+
+function updateThrownBottles(dt: number) {
+  for (let i = thrownBottles.length - 1; i >= 0; i--) {
+    const b = thrownBottles[i]!;
+    if (!b.alive) {
+      thrownBottles.splice(i, 1);
+      continue;
+    }
+    b.life -= dt;
+    b.vy += GRAVITY * 0.85 * dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    b.spin += dt * 14;
+    b.vx *= 0.995;
+
+    // hit enemy mid-air (Krypton)
+    if (b.id === "poison") {
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        if (aabb(b, e)) {
+          b.alive = false;
+          onBottleLand(b);
+          break;
+        }
+      }
+      if (!b.alive) {
+        thrownBottles.splice(i, 1);
+        continue;
+      }
+    }
+
+    const hit = solidAt(b);
+    const landed =
+      b.life <= 0 ||
+      b.y > H + 40 ||
+      (hit && b.vy >= 0 && b.y + b.h >= hit.y);
+
+    if (landed) {
+      if (hit && b.vy >= 0) b.y = hit.y - b.h;
+      b.alive = false;
+      onBottleLand(b);
+      thrownBottles.splice(i, 1);
+    }
+  }
+  if (thrownBottles.length === 0 && drinkAnimT <= 0 && pourAnimT <= 0) {
+    potionBusy = false;
+  }
+}
+
+function updatePotionAnims(dt: number) {
+  if (drinkAnimT > 0) {
+    drinkAnimT -= dt;
+    // sip particles
+    if (Math.random() < 0.35 && drinkAnimId) {
+      const c = POTIONS[drinkAnimId].color;
+      particles.push({
+        x: player.x + player.w / 2 + facing * 6,
+        y: player.y + 4,
+        vx: (Math.random() - 0.5) * 40,
+        vy: -40 - Math.random() * 40,
+        life: 0.35,
+        color: c,
+        size: 2,
+      });
+    }
+    if (drinkAnimT <= 0 && drinkAnimId) {
+      applyDrinkEffect(drinkAnimId);
+      drinkAnimId = null;
+      potionBusy = false;
+    }
+  }
+  if (pourAnimT > 0) {
+    pourAnimT -= dt;
+    // pouring stream particles
+    particles.push({
+      x: pourAnimX + (Math.random() - 0.5) * 8,
+      y: pourAnimY - 20 + Math.random() * 10,
+      vx: (Math.random() - 0.5) * 20,
+      vy: 60 + Math.random() * 40,
+      life: 0.25,
+      color: "#b44dff",
+      size: 2 + Math.random() * 2,
+    });
+    if (pourAnimT <= 0 && thrownBottles.length === 0 && drinkAnimT <= 0) {
+      potionBusy = false;
+    }
+  }
+}
+
+function usePotion() {
+  if (state !== "playing") return;
+  if (potionBusy || drinkAnimT > 0 || thrownBottles.length > 0) {
+    showHint("İksir animasyonu bitene kadar bekle");
+    return;
+  }
+  const held = rightHand.item;
+  if (!held || held.kind !== "potion") {
+    showHint("Sağ elde iksir yok");
+    return;
+  }
+
+  const id = held.id;
+  const mode = POTION_USE[id];
+  rightHand.item = null;
+  potionBusy = true;
+  updateHud();
+
+  if (mode === "drink") {
+    drinkAnimId = id;
+    drinkAnimT = 0.55;
+    beep(480, 0.08, "sine", 0.03);
+    showHint(`${POTIONS[id].label} içiliyor…`);
+    return;
+  }
+
+  // throw / ground-throw
+  throwPotionBottle(id);
+}
+
+function solidList(): Plat[] {
+  const base = scene === "interior" ? interiorPlatforms : platforms;
+  const extras: Plat[] = [];
+  for (const h of hazards) {
+    if (h.kind === "platform" && h.life > 0) extras.push(h);
+  }
+  return extras.length ? [...base, ...extras] : base;
+}
+
+function solidAt(r: Rect): Plat | null {
+  for (const p of solidList()) if (aabb(r, p)) return p;
+  return null;
+}
+
+function resolvePlayer(dt: number) {
+  const flying = flyTimer > 0;
+
+  if (flyTimer > 0) flyTimer = Math.max(0, flyTimer - dt);
+  if (invisTimer > 0) invisTimer = Math.max(0, invisTimer - dt);
+  if (shieldTimer > 0) {
+    shieldTimer = Math.max(0, shieldTimer - dt);
+    if (shieldTimer <= 0) shieldHp = 0;
+  }
+  if (enchantSparkleT > 0) enchantSparkleT = Math.max(0, enchantSparkleT - dt);
+
+  if (flying) {
+    player.vy += GRAVITY * 0.18 * dt;
+    if (jumpBuffered > 0) {
+      player.vy = -340;
+      jumpBuffered = 0;
+    }
+    player.vy = Math.max(-420, Math.min(360, player.vy));
+  } else {
+    player.vy += GRAVITY * dt;
+  }
+
+  const prevBottom = player.y + player.h;
+
+  player.x += player.vx * dt;
+  for (const p of solidList()) {
+    if (p.oneWay) continue; // one-way: never block horizontal
+    if (!aabb(player, p)) continue;
+    if (player.vx > 0) player.x = p.x - player.w;
+    else if (player.vx < 0) player.x = p.x + p.w;
+    player.vx = 0;
+  }
+  if (scene === "interior") {
+    player.x = Math.max(20, Math.min(player.x, INTERIOR_W - player.w - 20));
+  } else {
+    player.x = Math.max(10, Math.min(player.x, WORLD_W - player.w - 10));
+  }
+
+  player.y += player.vy * dt;
+  onGround = false;
+  for (const p of solidList()) {
+    if (!aabb(player, p)) continue;
+    if (p.oneWay) {
+      // Land only when falling and feet were at/above platform top before move
+      if (player.vy >= 0 && prevBottom <= p.y + 6) {
+        player.y = p.y - player.h;
+        onGround = true;
+        coyote = 0.1;
+        player.vy = 0;
+      }
+      continue;
+    }
+    if (player.vy > 0) {
+      player.y = p.y - player.h;
+      onGround = true;
+      coyote = 0.1;
+    } else if (player.vy < 0) {
+      player.y = p.y + p.h;
+    }
+    player.vy = 0;
+  }
+
+  if (player.y < 24) {
+    player.y = 24;
+    if (player.vy < 0) player.vy = 0;
+  }
+
+  if (player.y > H + 80) hurtPlayer(9999, 0);
+}
+
+function contactDamage(e: Enemy) {
+  if (e.kind === "goblin") return 80;
+  if (e.kind === "archer" || e.kind === "bat") return 15;
+  if (e.bossKind === "ironface") return 25;
+  if (e.bossKind === "cloud") return 35;
+  if (e.bossKind === "mothman") return 40;
+  if (e.bossKind === "anaconda") return 45;
+  if (e.bossKind === "kingkong") return 80;
+  if (e.bossKind === "firefox") return 170;
+  if (e.bossKind === "minotaur") return 60;
+  if (e.bossKind === "creeper") return 90;
+  if (e.bossKind === "sphinx") return 100;
+  if (e.bossKind === "cerberus") return 450;
+  return 50;
+}
+
+function applyVenomDot() {
+  venomDot = 5;
+  venomAcc = 0;
+  showHint("Zehirlendin!");
+  burst(player.x + player.w / 2, player.y + 20, "#5dff7a", 10);
+  beep(140, 0.1, "sawtooth", 0.03);
+}
+
+function tickVenomDot(dt: number) {
+  if (venomDot <= 0 || state !== "playing") return;
+  venomDot = Math.max(0, venomDot - dt);
+  venomAcc += dt;
+  while (venomAcc >= 1) {
+    venomAcc -= 1;
+    player.hp -= 20;
+    burst(player.x + player.w / 2, player.y + player.h / 2, "#5dff7a", 6);
+    updateHud();
+    if (player.hp <= 0) {
+      state = "dead";
+      showOverlay("DÜŞTÜN", "R veya Yeniden ile tekrar dene.");
+      venomDot = 0;
+      venomAcc = 0;
+      return;
+    }
+  }
+  if (venomDot <= 0) venomAcc = 0;
+}
+
+function damageEnemy(e: Enemy, dmg: number, fromX: number) {
+  if (!e.alive || e.hurt > 0) return;
+  if (e.unhittable) return;
+  if (e.bossKind === "cloud" && e.raining > 0) return;
+
+  if (e.bossKind === "cerberus" && e.headHp) {
+    // Hit nearest living head
+    const centers = [0.2, 0.5, 0.8].map((t) => e.x + e.w * t);
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < 3; i++) {
+      if (e.headHp[i]! <= 0) continue;
+      const d = Math.abs(fromX - centers[i]!);
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    if (best < 0) return;
+    e.headHp[best]! -= dmg;
+    e.hurt = 0.2;
+    e.flash = 0.15;
+    e.hp = e.headHp[0]! + e.headHp[1]! + e.headHp[2]!;
+    sfxHit();
+    burst(centers[best]!, e.y + 20, "#ffe08a", 8);
+    shake = 5;
+    if (e.headHp.every((h) => h <= 0)) {
+      e.alive = false;
+      e.hp = 0;
+      burst(e.x + e.w / 2, e.y + e.h / 2, "#ff8a8a", 28);
+      onBossDefeated(e);
+    }
+    return;
+  }
+
+  e.hp -= dmg;
+  e.hurt = 0.2;
+  e.flash = 0.15;
+  e.vx = facing * (e.kind === "boss" ? 40 : 130);
+  sfxHit();
+  burst(e.x + e.w / 2, e.y + e.h / 2, "#ffe08a", 8);
+  shake = 5;
+  if (e.hp <= 0) {
+    e.alive = false;
+    burst(e.x + e.w / 2, e.y + e.h / 2, "#ff8a8a", 18);
+    if (e.kind === "boss") onBossDefeated(e);
+    else if (chance(0.35)) addItem("coin", e.x + 6, e.y);
+  }
+}
+
+function onBossDefeated(e: Enemy) {
+  if (levelClearPending) return;
+  levelClearPending = true;
+  burst(e.x + e.w / 2, e.y + e.h / 2, "#ffe08a", 28);
+  shake = 16;
+  hazards.length = 0;
+
+  if (level >= MAX_LEVEL) {
+    inventory.medallion = true;
+    state = "win";
+    queueDialog([
+      {
+        name: "CERBERUS",
+        text: "Üç baş… bir son. Kardeşin… özgür.",
+      },
+      { name: "KARDEŞ", text: "Wack… beni buldun. Birlikteyiz." },
+    ]);
+    showOverlay(
+      "KARDEŞİNİ KURTARDIN",
+      "Cerberus yenildi. Medalyon senin. Wack The Man.",
+    );
+    updateHud();
+    return;
+  }
+
+  grantItem({ kind: "potion", id: "purple" });
+  player.hp = Math.min(player.maxHp, player.hp + 80);
+  const cleared = level;
+  const bossName = e.name;
+  level += 1;
+
+  queueDialog([
+    { name: bossName, text: "…Yeter… git…" },
+    {
+      name: "???",
+      text: `Seviye ${cleared} temiz. Enchant iksiri kazandın.`,
+    },
+  ]);
+  showStory(`Enchant! Seviye ${level}.`);
+
+  scene = "world";
+  currentInterior = null;
+  player.x = 80;
+  player.y = GROUND_Y - player.h;
+  player.vx = 0;
+  player.vy = 0;
+  camX = 0;
+  buildWorld();
+  updateHud();
+}
+
+function triggerBossIntro(e: Enemy) {
+  if (e.introDone || !e.bossKind) return;
+  e.introDone = true;
+  const lines: Record<BossKind, DialogLine[]> = {
+    ironface: [
+      { name: "IRONFACE", text: "Yavaş adımlarım… ama ezilişin hızlı." },
+    ],
+    cloud: [
+      { name: "THE CLOUD", text: "Yağmur geliyor. Her damla… bir iğne." },
+    ],
+    mothman: [{ name: "MOTHMAN", text: "Kanatlarım gölge. Pamuk… boğar." }],
+    anaconda: [
+      { name: "ANACONDA", text: "Zehirim damarlarındadır. Kaçamazsın." },
+    ],
+    kingkong: [
+      { name: "KINGKONG", text: "Yumruğum dağları ezer. Sen kimsin?" },
+    ],
+    firefox: [
+      { name: "FIREFOX", text: "Üç kuyruk. Bir nefes. Kül olursun." },
+    ],
+    minotaur: [
+      { name: "MINOTAUR", text: "Boynuz hücumu. Zıpla… ya da kırıl." },
+    ],
+    creeper: [
+      { name: "CREEPER", text: "Bıçak döner. Kafa uçar. Tuzak bekler." },
+    ],
+    sphinx: [
+      { name: "SPHINX", text: "Çöl dikeni. Örs. Kol. Bilmece yok — ölüm var." },
+    ],
+    cerberus: [
+      {
+        name: "CERBERUS",
+        text: "Üç baş. Üç ölüm. Kardeşin… benim gölgemde.",
+      },
+      { name: "SEN", text: "Kardeşimi ver." },
+      { name: "CERBERUS", text: "Lav yükselir. Platform… ya da yan." },
+    ],
+  };
+  queueDialog(lines[e.bossKind]);
+}
+
+function updateBoss(e: Enemy, dt: number) {
+  const dx = player.x - e.x;
+  const dist = Math.abs(dx);
+  const playerVisible = invisTimer <= 0;
+  e.facing = playerVisible ? (dx >= 0 ? 1 : -1) : e.facing;
+  e.unhittable = false;
+
+  if (dist < 480) triggerBossIntro(e);
+
+  const kind = e.bossKind ?? "ironface";
+  let skipGravity = false;
+
+  // When invisible, bosses still patrol but do not aim/attack the player
+  if (!playerVisible) {
+    if (kind === "mothman" || kind === "creeper" || (kind === "cloud" && e.raining > 0)) {
+      skipGravity = true;
+      e.grounded = false;
+      const hoverY =
+        kind === "cloud"
+          ? 90
+          : GROUND_Y - e.h - (kind === "creeper" ? 40 : 70);
+      e.y += (hoverY - e.y) * Math.min(1, 3 * dt);
+    }
+    e.vx = e.facing * 30;
+    e.x += e.vx * dt;
+    if (e.x < e.patrolL) e.x = e.patrolL;
+    if (e.x > e.patrolR) e.x = e.patrolR;
+    if (!skipGravity) {
+      e.vy += GRAVITY * dt;
+      e.y += e.vy * dt;
+      const hit = solidAt(e);
+      if (hit && e.vy >= 0) {
+        e.y = hit.y - e.h;
+        e.vy = 0;
+        e.grounded = true;
+      }
+    }
+    return;
+  }
+
+  if (kind === "ironface") {
+    e.vx = e.facing * 40;
+    e.x += e.vx * dt;
+    if (e.attackCd <= 0 && dist < 260) {
+      e.vy = -620;
+      e.grounded = false;
+      e.attackCd = 2.4;
+      e.phase = 1;
+    }
+  } else if (kind === "cloud") {
+    e.vx = e.facing * 70;
+    e.x += e.vx * dt;
+    if (e.raining > 0) {
+      skipGravity = true;
+      e.unhittable = true;
+      e.vy = 0;
+      const hoverY = 90 + Math.sin(time * 1.4) * 12;
+      e.y += (hoverY - e.y) * Math.min(1, 4 * dt);
+      e.grounded = false;
+      e.raining -= dt;
+      const need = Math.min(10, Math.floor(10 - e.raining) + 1);
+      while (e.rainSpawned < need && e.rainSpawned < 10) {
+        const rx = player.x + rand(-40, 80);
+        spawnProjectile("rain", rx, 40, 0, 220, 15, 3.5, true, 8, 14);
+        e.rainSpawned += 1;
+      }
+      if (e.raining <= 0) {
+        e.attackCd = 5;
+        e.rainSpawned = 0;
+        e.vy = 80;
+        e.unhittable = false;
+      }
+    } else if (e.attackCd <= 0 && dist < 520) {
+      e.raining = 10;
+      e.rainSpawned = 0;
+      e.grounded = false;
+      e.vy = -280;
+      showHint("Yağmur başlıyor!");
+      beep(200, 0.15, "sine", 0.03);
+    }
+  } else if (kind === "mothman") {
+    skipGravity = true;
+    e.grounded = false;
+    const hoverY = GROUND_Y - e.h - 70 + Math.sin(time * 2.2) * 18;
+    e.vx = e.facing * 90;
+    e.x += e.vx * dt;
+    e.y += (hoverY - e.y) * Math.min(1, 3 * dt);
+    if (e.attackCd <= 0 && dist < 500) {
+      spawnProjectile(
+        "cotton",
+        e.x + e.w / 2,
+        e.y + e.h / 2,
+        e.facing * 240,
+        30 + rand(-20, 40),
+        45,
+        2.2,
+        true,
+        16,
+        14,
+      );
+      e.attackCd = 1.4;
+      beep(300, 0.06, "triangle", 0.025);
+    }
+  } else if (kind === "anaconda") {
+    e.vx = e.facing * 75;
+    e.x += e.vx * dt;
+    if (e.attackCd <= 0 && dist < 500) {
+      spawnProjectile(
+        "venom",
+        e.x + (e.facing > 0 ? e.w : 0),
+        e.y + 16,
+        e.facing * 280,
+        -80,
+        10,
+        2.2,
+        true,
+        14,
+        12,
+      );
+      e.attackCd = 1.7;
+      beep(160, 0.08, "sawtooth", 0.03);
+    }
+  } else if (kind === "kingkong") {
+    e.vx = e.facing * 55;
+    e.x += e.vx * dt;
+    if (e.telegraph > 0) {
+      e.telegraph -= dt;
+      e.vx = 0;
+      if (e.telegraph <= 0) {
+        e.phase = 2;
+        e.attackCd = 0.4;
+        e.vx = e.facing * 380;
+      }
+    } else if (e.phase === 2) {
+      e.x += e.vx * dt;
+      e.attackCd -= dt;
+      if (e.attackCd <= 0) {
+        e.phase = 0;
+        e.vx = 0;
+        e.attackCd = 1.6;
+        if (aabb(player, { x: e.x - 10, y: e.y, w: e.w + 20, h: e.h })) {
+          hurtPlayer(80, e.facing * 320);
+        }
+      }
+    } else if (e.attackCd <= 0 && dist < 360) {
+      e.telegraph = 0.45;
+      e.attackCd = 99;
+      burst(e.x + e.w / 2, e.y + e.h - 4, "#ffaa66", 8);
+      showHint("Kingkong yumruğu!");
+    }
+  } else if (kind === "firefox") {
+    e.vx = e.facing * 95;
+    e.x += e.vx * dt;
+    if (e.attackCd <= 0 && dist < 520) {
+      if (e.phase % 2 === 0) {
+        spawnProjectile(
+          "breath",
+          e.x + (e.facing > 0 ? e.w : -16),
+          e.y + 24,
+          e.facing * 300,
+          -10,
+          200,
+          1.6,
+          true,
+          22,
+          14,
+        );
+      } else {
+        // tail swipe — contact window
+        e.phase = 10;
+        e.attackCd = 0.35;
+        burst(e.x + e.w / 2, e.y + e.h / 2, "#ff6020", 10);
+      }
+      e.phase += 1;
+      if (e.phase !== 11) e.attackCd = 1.5;
+      beep(220, 0.07, "sawtooth", 0.03);
+    }
+    if (e.phase === 10) {
+      if (aabb(player, { x: e.x - 20, y: e.y + 10, w: e.w + 40, h: e.h })) {
+        hurtPlayer(170, e.facing * 280);
+      }
+      if (e.attackCd <= 0) {
+        e.phase = 1;
+        e.attackCd = 1.4;
+      }
+    }
+  } else if (kind === "minotaur") {
+    if (e.telegraph > 0) {
+      e.telegraph -= dt;
+      e.vx = 0;
+      if (e.telegraph <= 0) {
+        e.phase = 2;
+        e.attackCd = 0.5;
+        e.vx = e.facing * 560;
+      }
+    } else if (e.phase === 2) {
+      e.x += e.vx * dt;
+      e.attackCd -= dt;
+      // Horn charge — jumpable (only hits if player low)
+      if (
+        aabb(player, { x: e.x, y: e.y + 20, w: e.w, h: e.h - 20 }) &&
+        player.y + player.h > e.y + 30
+      ) {
+        hurtPlayer(235, e.facing * 340);
+      }
+      if (e.attackCd <= 0) {
+        e.phase = 0;
+        e.vx = 0;
+        e.attackCd = 1.2;
+      }
+    } else {
+      e.vx = e.facing * 60;
+      e.x += e.vx * dt;
+      if (e.attackCd <= 0 && dist < 480) {
+        if (e.phase % 2 === 0) {
+          e.telegraph = 0.55;
+          e.attackCd = 99;
+          showHint("Boynuz hücumu — zıpla!");
+        } else {
+          spawnProjectile(
+            "arrow",
+            e.x + (e.facing > 0 ? e.w : -16),
+            e.y + 28,
+            e.facing * 360,
+            -20,
+            180,
+            2.2,
+            true,
+            18,
+            8,
+          );
+          e.attackCd = 1.5;
+        }
+        e.phase += 1;
+      }
+    }
+  } else if (kind === "creeper") {
+    skipGravity = true;
+    e.grounded = false;
+    const hoverY = GROUND_Y - e.h - 40 + Math.sin(time * 3.5) * 30;
+    e.vx = e.facing * (140 + (e.hp < e.maxHp * 0.5 ? 40 : 0));
+    e.x += e.vx * dt;
+    e.y += (hoverY - e.y) * Math.min(1, 4 * dt);
+    if (e.attackCd <= 0 && dist < 560) {
+      const mode = e.phase % 3;
+      if (mode === 0) {
+        spawnProjectile(
+          "blade",
+          e.x + e.w / 2,
+          e.y + 20,
+          e.facing * 280,
+          40,
+          200,
+          2.0,
+          true,
+          18,
+          18,
+        );
+      } else if (mode === 1) {
+        spawnProjectile(
+          "head",
+          e.x + e.w / 2,
+          e.y + 10,
+          e.facing * 220,
+          -120,
+          280,
+          2.4,
+          true,
+          20,
+          20,
+        );
+      } else {
+        hazards.push({
+          x: player.x + rand(-30, 30),
+          y: GROUND_Y - 8,
+          w: 40,
+          h: 8,
+          kind: "trap",
+          dmg: 250,
+          life: 3.5,
+          tick: 0,
+        });
+        showHint("Yer tuzağı!");
+      }
+      e.phase += 1;
+      e.attackCd = 0.9;
+      beep(100, 0.06, "sawtooth", 0.03);
+    }
+  } else if (kind === "sphinx") {
+    // Stationary-ish
+    e.vx = e.facing * 15;
+    e.x += e.vx * dt;
+    if (e.attackCd <= 0 && dist < 600) {
+      const mode = e.phase % 3;
+      if (mode === 0) {
+        for (let i = 0; i < 3; i++) {
+          spawnProjectile(
+            "spike",
+            player.x + rand(-60, 60),
+            GROUND_Y - 40,
+            0,
+            -20,
+            280,
+            1.8,
+            true,
+            10,
+            28,
+          );
+        }
+      } else if (mode === 1) {
+        spawnProjectile(
+          "anvil",
+          player.x + rand(-20, 20),
+          40,
+          0,
+          280,
+          300,
+          3.0,
+          true,
+          28,
+          24,
+        );
+      } else {
+        e.telegraph = 0.5;
+        e.phase = 20;
+        e.attackCd = 99;
+        showHint("Kol ezmesi!");
+      }
+      if (e.phase !== 20) {
+        e.phase += 1;
+        e.attackCd = 1.7;
+      }
+      beep(160, 0.08, "triangle", 0.03);
+    }
+    if (e.phase === 20) {
+      e.telegraph -= dt;
+      if (e.telegraph <= 0) {
+        if (Math.abs(player.x - e.x) < 140 && player.y + player.h > e.y + 20) {
+          hurtPlayer(350, player.x < e.x ? -300 : 300);
+        }
+        burst(e.x + e.w / 2, e.y + e.h, "#c9a227", 16);
+        shake = 14;
+        e.phase = 0;
+        e.attackCd = 2.0;
+      }
+    }
+  } else {
+    // cerberus
+    e.vx = e.facing * 70;
+    e.x += e.vx * dt;
+    if (e.attackCd <= 0 && dist < 500) {
+      if (e.phase % 3 === 0) {
+        // bite via contact boost
+        e.phase = 30;
+        e.attackCd = 0.4;
+        e.vx = e.facing * 300;
+      } else if (e.phase % 3 === 1) {
+        // jump → lava rises
+        e.vy = -700;
+        e.grounded = false;
+        e.phase = 40;
+        e.attackCd = 3.5;
+        hazards.length = 0;
+        hazards.push({
+          x: e.patrolL - 40,
+          y: GROUND_Y + 8,
+          w: e.patrolR - e.patrolL + 120,
+          h: 80,
+          kind: "lava",
+          dmg: 500,
+          life: 8,
+          tick: 0,
+        });
+        hazards.push({
+          x: e.x + e.w / 2 - 50,
+          y: GROUND_Y - 90,
+          w: 100,
+          h: 18,
+          kind: "platform",
+          dmg: 0,
+          life: 8,
+          tick: 0,
+        });
+        showHint("Lav yükseliyor! Platforma çık!");
+      } else {
+        spawnProjectile(
+          "breath",
+          e.x + e.w / 2,
+          e.y + 30,
+          e.facing * 260,
+          0,
+          200,
+          1.5,
+          true,
+          18,
+          12,
+        );
+        e.attackCd = 1.4;
+      }
+      e.phase += 1;
+    }
+    if (e.phase === 30) {
+      e.x += e.vx * dt;
+      e.attackCd -= dt;
+      if (aabb(player, e)) hurtPlayer(450, e.facing * 360);
+      if (e.attackCd <= 0) {
+        e.phase = 1;
+        e.attackCd = 1.5;
+      }
+    }
+  }
+
+  if (e.x < e.patrolL) e.x = e.patrolL;
+  if (e.x > e.patrolR) e.x = e.patrolR;
+
+  if (!skipGravity) {
+    e.vy += GRAVITY * dt;
+    e.y += e.vy * dt;
+    const hit = solidAt(e);
+    if (hit && e.vy >= 0) {
+      const wasAir = !e.grounded;
+      e.y = hit.y - e.h;
+      e.vy = 0;
+      e.grounded = true;
+      if (wasAir && (kind === "ironface" || kind === "cerberus")) {
+        shake = 12;
+        burst(e.x + e.w / 2, e.y + e.h, "#c9a227", 14);
+        if (Math.abs(player.x + player.w / 2 - (e.x + e.w / 2)) < 110) {
+          hurtPlayer(kind === "ironface" ? 40 : 80, player.x < e.x ? -280 : 280);
+        }
+      }
+    }
+  }
+}
+
+function updateHazards(dt: number) {
+  for (let i = hazards.length - 1; i >= 0; i--) {
+    const h = hazards[i]!;
+    h.life -= dt;
+    if (h.life <= 0) {
+      hazards.splice(i, 1);
+      continue;
+    }
+    if (h.kind === "lava") {
+      // rise toward ground surface
+      const targetY = GROUND_Y - 20;
+      if (h.y > targetY) h.y = Math.max(targetY, h.y - 40 * dt);
+      h.tick -= dt;
+      if (aabb(player, h) && h.tick <= 0) {
+        // check if on safe platform
+        let onSafe = false;
+        for (const p of hazards) {
+          if (p.kind !== "platform") continue;
+          if (
+            player.y + player.h <= p.y + 6 &&
+            player.y + player.h >= p.y - 8 &&
+            player.x + player.w > p.x &&
+            player.x < p.x + p.w
+          ) {
+            onSafe = true;
+            break;
+          }
+        }
+        if (!onSafe) {
+          hurtPlayer(500, 0);
+          h.tick = 3;
+        }
+      }
+    } else if (h.kind === "platform") {
+      // sparks while standing on platform
+      if (
+        player.y + player.h <= h.y + 6 &&
+        player.y + player.h >= h.y - 8 &&
+        player.x + player.w > h.x &&
+        player.x < h.x + h.w &&
+        onGround
+      ) {
+        h.tick -= dt;
+        if (h.tick <= 0) {
+          hurtPlayer(380, rand(-1, 1) * 120);
+          h.tick = 1.2;
+          spawnProjectile(
+            "spark",
+            player.x + 10,
+            h.y - 8,
+            rand(-40, 40),
+            -80,
+            0,
+            0.4,
+            true,
+            6,
+            6,
+          );
+        }
+      }
+    } else if (h.kind === "trap") {
+      if (aabb(player, h) && invuln <= 0 && invisTimer <= 0) {
+        hurtPlayer(h.dmg, 0);
+        h.life = 0;
+      }
+    }
+  }
+}
+
+function updatePlatTraps(dt: number) {
+  if (scene !== "world") return;
+  for (const t of platTraps) {
+    t.tick = Math.max(0, t.tick - dt);
+    if (aabb(player, t) && t.tick <= 0 && invuln <= 0) {
+      // Traps still hit while invisible (already-placed hazards)
+      hurtPlayer(t.dmg, 0);
+      t.tick = 0.8;
+      burst(t.x + t.w / 2, t.y, "#ff6060", 6);
+    }
+  }
+}
+
+function updateGroundDrops(dt: number) {
+  for (let i = groundDrops.length - 1; i >= 0; i--) {
+    const d = groundDrops[i]!;
+    d.bob += dt * 3;
+    if (d.sparkle > 0) d.sparkle = Math.max(0, d.sparkle - dt);
+    const body = {
+      x: d.x,
+      y: d.y + Math.sin(d.bob) * 3,
+      w: d.w,
+      h: d.h,
+    };
+    if (!aabb(player, body)) continue;
+    if (d.kind === "weapon") {
+      const ok = grantItem({
+        kind: "weapon",
+        id: d.id as CarryWeapon,
+      });
+      if (ok) {
+        // restore ammo / enchanted state onto left hand if rifle
+        if (leftHand.item?.kind === "weapon" && leftHand.item.id === d.id) {
+          if (d.ammo !== undefined) leftHand.item.ammo = d.ammo;
+        } else {
+          // may have gone to bag
+          for (let b = 0; b < bag.length; b++) {
+            const it = bag[b];
+            if (it?.kind === "weapon" && it.id === d.id && d.ammo !== undefined) {
+              it.ammo = d.ammo;
+            }
+          }
+        }
+        if (d.enchanted) weaponEnchanted[d.id as WeaponId] = true;
+        groundDrops.splice(i, 1);
+      }
+    } else {
+      const slot = d.id as ArmorSlot;
+      grantArmor(slot, d.armorAbsorb ?? 0);
+      groundDrops.splice(i, 1);
+    }
+  }
+}
+
+function nearestEnemyFor(fromX: number, fromY: number): Enemy | null {
+  let best: Enemy | null = null;
+  let bestD = Infinity;
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const d = Math.hypot(e.x + e.w / 2 - fromX, e.y + e.h / 2 - fromY);
+    if (d < bestD) {
+      bestD = d;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function updateAllies(dt: number) {
+  for (const a of allies) {
+    if (!a.alive) continue;
+    a.attackCd = Math.max(0, a.attackCd - dt);
+
+    // Follow / strafe near player
+    const targetX = player.x + (a.x < player.x ? -40 : 44);
+    const dx = targetX - a.x;
+    a.vx = Math.max(-160, Math.min(160, dx * 4));
+    a.facing = a.vx >= 0 ? 1 : -1;
+    a.x += a.vx * dt;
+    a.vy += GRAVITY * dt;
+    a.y += a.vy * dt;
+    const hit = solidAt(a);
+    if (hit && a.vy >= 0) {
+      // one-way land if feet near top
+      if (!hit.oneWay || a.y + a.h <= hit.y + 10) {
+        a.y = hit.y - a.h;
+        a.vy = 0;
+      }
+    }
+    if (scene === "world") {
+      a.x = Math.max(10, Math.min(a.x, WORLD_W - a.w - 10));
+    }
+
+    const foe = nearestEnemyFor(a.x, a.y);
+    if (foe && a.attackCd <= 0) {
+      const dir = foe.x >= a.x ? 1 : -1;
+      a.facing = dir;
+      spawnProjectile(
+        "magic",
+        a.x + (dir > 0 ? a.w : -10),
+        a.y + 10,
+        dir * 340,
+        -40,
+        weaponDamage("staff") || 380,
+        1.1,
+        false,
+        14,
+        14,
+      );
+      a.attackCd = 0.7;
+      beep(880, 0.04, "sine", 0.02);
+    }
+
+    // Ally takes contact damage from enemies
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      if (aabb(a, e)) {
+        a.hp -= contactDamage(e) * 0.35 * dt * 8;
+        if (a.hp <= 0) {
+          a.alive = false;
+          burst(a.x + a.w / 2, a.y + a.h / 2, "#ff7ad9", 12);
+        }
+      }
+    }
+  }
+  // prune dead occasionally
+  for (let i = allies.length - 1; i >= 0; i--) {
+    if (!allies[i]!.alive) allies.splice(i, 1);
+  }
+}
+
+function updateEnemies(dt: number) {
+  if (scene !== "world") return;
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    e.hurt = Math.max(0, e.hurt - dt);
+    e.flash = Math.max(0, e.flash - dt);
+    e.attackCd = Math.max(0, e.attackCd - dt);
+
+    if (e.kind === "boss") {
+      updateBoss(e, dt);
+    } else if (e.kind === "bat") {
+      e.x += e.vx * dt;
+      e.y += Math.sin(time * 4 + e.x * 0.01) * 40 * dt;
+      if (e.x < e.patrolL || e.x > e.patrolR) e.vx *= -1;
+      e.facing = e.vx >= 0 ? 1 : -1;
+      if (e.attackCd <= 0 && Math.abs(player.x - e.x) < 360 && invisTimer <= 0) {
+        const dir = player.x >= e.x ? 1 : -1;
+        spawnProjectile(
+          "spit",
+          e.x + e.w / 2,
+          e.y + e.h / 2,
+          dir * 260,
+          40,
+          55,
+          2.0,
+          true,
+          10,
+          10,
+        );
+        e.attackCd = 1.8;
+      }
+    } else if (e.kind === "archer") {
+      e.x += e.vx * dt;
+      if (e.x < e.patrolL || e.x > e.patrolR) e.vx *= -1;
+      e.facing = e.vx >= 0 ? 1 : -1;
+      e.vy += GRAVITY * dt;
+      e.y += e.vy * dt;
+      const hit = solidAt(e);
+      if (hit && e.vy >= 0) {
+        e.y = hit.y - e.h;
+        e.vy = 0;
+      }
+      if (e.attackCd <= 0 && Math.abs(player.x - e.x) < 420 && invisTimer <= 0) {
+        const dir = player.x >= e.x ? 1 : -1;
+        e.facing = dir;
+        spawnProjectile(
+          "arrow",
+          e.x + (dir > 0 ? e.w : -12),
+          e.y + 18,
+          dir * 340,
+          -20,
+          35,
+          2.4,
+          true,
+          16,
+          6,
+        );
+        e.attackCd = 1.6;
+        beep(500, 0.03, "triangle", 0.015);
+      }
+    } else {
+      e.x += e.vx * dt;
+      if (e.x < e.patrolL || e.x > e.patrolR) e.vx *= -1;
+      e.facing = e.vx >= 0 ? 1 : -1;
+      e.vy += GRAVITY * dt;
+      e.y += e.vy * dt;
+      const hit = solidAt(e);
+      if (hit && e.vy >= 0) {
+        e.y = hit.y - e.h;
+        e.vy = 0;
+      }
+    }
+
+    if (
+      e.hurt <= 0 &&
+      !e.unhittable &&
+      aabb(player, e) &&
+      invuln <= 0 &&
+      invisTimer <= 0
+    ) {
+      const knock = player.x < e.x ? -260 : 260;
+      hurtPlayer(contactDamage(e), knock);
+    }
+  }
+
+  const box = attackBox();
+  if (box) {
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      if (!aabb(box, e)) continue;
+      damageEnemy(e, weaponDamage(equippedWeapon()), player.x + player.w / 2);
+    }
+  }
+}
+
+function updateItems(_dt: number) {
+  if (scene !== "world") return;
+  for (const it of items) {
+    if (it.taken) continue;
+    it.bob += _dt * 3;
+    const body = {
+      x: it.x,
+      y: it.y + Math.sin(it.bob) * 4,
+      w: it.w,
+      h: it.h,
+    };
+    if (!aabb(player, body)) continue;
+    it.taken = true;
+    sfxPickup();
+    if (it.kind === "coin") inventory.coins += 1;
+    else if (it.kind === "key") {
+      inventory.key = true;
+      showStory("Anahtar bulundu. Bar kapısı açılır.");
+    } else if (it.kind === "medallion") {
+      inventory.medallion = true;
+    }
+    updateHud();
+  }
+}
+
+function updateProjectiles(dt: number) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i]!;
+    if (!p.alive) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (
+      p.kind === "venom" ||
+      p.kind === "poison" ||
+      p.kind === "bolt" ||
+      p.kind === "head" ||
+      p.kind === "anvil"
+    ) {
+      p.vy += 420 * dt;
+    } else if (p.kind === "cotton" || p.kind === "blade") {
+      p.vy += 120 * dt;
+    } else if (p.kind === "fire" || p.kind === "breath") {
+      p.vy += 80 * dt;
+    }
+    if (p.life <= 0 || p.y > H + 40) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+
+    if (p.hostile) {
+      if (aabb(player, p) && invuln <= 0) {
+        if (p.kind === "venom") {
+          applyVenomDot();
+          if (p.dmg > 0) hurtPlayer(p.dmg, p.vx > 0 ? 160 : -160);
+        } else if (p.kind === "spark") {
+          // visual only if dmg 0
+          if (p.dmg > 0) hurtPlayer(p.dmg, 0);
+        } else {
+          hurtPlayer(p.dmg, p.vx > 0 ? 200 : -200);
+        }
+        p.alive = false;
+      }
+    } else if (scene === "world") {
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        if (!aabb(p, e)) continue;
+        damageEnemy(e, p.dmg, p.x);
+        p.alive = false;
+        break;
+      }
+    }
+
+    if (!p.alive) projectiles.splice(i, 1);
+  }
+}
+
+function tryOpenChest() {
+  if (!chest || chest.opened || scene !== "interior") return false;
+  if (!aabb(player, { x: chest.x - 24, y: chest.y - 16, w: chest.w + 48, h: chest.h + 32 }))
+    return false;
+
+  chest.opened = true;
+  if (chest.isParchment || chest.type === "none") {
+    parchmentShown = true;
+    queueDialog([
+      {
+        name: "PARŞÖMEN",
+        text: "Üzerinde pikselli bir rakun… orta parmak çekiyor. Rocket?",
+      },
+    ]);
+    showStory("Sandık yok — sadece alaycı bir parşömen.");
+    beep(180, 0.2, "sawtooth", 0.03);
+    return true;
+  }
+
+  const loot = rollChestLoot(chest.type);
+  const labels: Record<ChestType, string> = {
+    wood: "Ahşap",
+    thorny: "Dikenli",
+    sticky: "Yapışkan",
+    diamond: "Elmas",
+    obsidian: "Obsidyen",
+    none: "Boş",
+  };
+  showHint(`${labels[chest.type]} sandık açıldı`);
+  grantItem(loot);
+  burst(chest.x + 20, chest.y, "#f5c518", 16);
+  return true;
+}
+
+function tryEnterDoor() {
+  if (scene === "interior") {
+    if (tryOpenChest()) return;
+    if (currentInterior && player.x < 140) {
+      sfxDoor();
+      scene = "world";
+      player.x = returnPos.x;
+      player.y = returnPos.y;
+      player.vx = 0;
+      player.vy = 0;
+      currentInterior = null;
+      chest = null;
+      updateHud();
+      showHint("Dışarı çıktın.");
+    }
+    return;
+  }
+  for (const d of doors) {
+    if (
+      !aabb(player, {
+        x: d.x - 36,
+        y: d.y - 8,
+        w: d.w + 72,
+        h: d.h + 16,
+      })
+    )
+      continue;
+    if (d.needsKey && !inventory.key) {
+      showHint("Bar kapısı kilitli — anahtar gerekli");
+      beep(90, 0.08, "square", 0.025);
+      return;
+    }
+    const def = interiors[d.interiorId];
+    if (!def) continue;
+    sfxDoor();
+    returnPos = { x: def.returnX, y: def.returnY };
+    currentInterior = def;
+    buildInteriorRoom(def);
+    scene = "interior";
+    player.x = 120;
+    player.y = GROUND_Y - player.h;
+    player.vx = 0;
+    player.vy = 0;
+    camX = 0;
+    updateHud();
+    if (def.kind === "bar") {
+      queueDialog([
+        {
+          name: "BARMEN",
+          text: "Silah ve iksir yalnız üst kattaki sandıktan. Masada bedava yok.",
+        },
+        {
+          name: "BARBAR",
+          text: "Bir bira daha… ve sen o sandığa tırman.",
+        },
+      ]);
+    } else {
+      showHint("Eski ev. Dinlen, sonra dışarı.");
+    }
+    return;
+  }
+}
+
+function updateParticles(dt: number) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]!;
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 600 * dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function tryAttack() {
+  if (attackCd > 0 || state !== "playing") return;
+  const wpn = equippedWeapon();
+  const w = WEAPONS[wpn];
+
+  if (wpn === "rifle") {
+    if (rifleAmmo() <= 0) {
+      showHint("Mermi yok! (0/5)");
+      beep(90, 0.05, "square", 0.02);
+      return;
+    }
+    setRifleAmmo(rifleAmmo() - 1);
+    spawnProjectile(
+      "bullet",
+      facing === 1 ? player.x + player.w : player.x - 14,
+      player.y + 18,
+      facing * 520,
+      0,
+      weaponDamage("rifle"),
+      0.9,
+      false,
+      14,
+      6,
+    );
+    sfxShoot();
+    updateHud();
+    attackT = 0.12;
+    attackCd = w.cooldown;
+    return;
+  }
+
+  if (wpn === "lava") {
+    spawnProjectile(
+      "fire",
+      facing === 1 ? player.x + player.w : player.x - 16,
+      player.y + 16,
+      facing * 280,
+      -20,
+      weaponDamage("lava"),
+      0.45,
+      false,
+      16,
+      12,
+    );
+    sfxShoot();
+    attackT = 0.14;
+    attackCd = w.cooldown;
+    return;
+  }
+
+  if (wpn === "staff") {
+    spawnProjectile(
+      "magic",
+      facing === 1 ? player.x + player.w : player.x - 14,
+      player.y + 14,
+      facing * 360,
+      -30,
+      weaponDamage("staff"),
+      1.1,
+      false,
+      14,
+      14,
+    );
+    beep(880, 0.06, "sine", 0.03);
+    attackT = 0.14;
+    attackCd = w.cooldown;
+    return;
+  }
+
+  sfxSwing();
+  attackT = wpn === "knife" ? 0.1 : 0.16;
+  attackCd = w.cooldown;
+}
+
+function handleInput(dt: number) {
+  if (state === "dialog") {
+    const adv =
+      keys.has("x") || keys.has("X") || keys.has("Enter") || keys.has(" ");
+    if (adv && !dialogAdvanceLatch) {
+      dialogAdvanceLatch = true;
+      advanceDialog();
+    }
+    if (!adv) dialogAdvanceLatch = false;
+    return;
+  }
+
+  const left = keys.has("ArrowLeft") || keys.has("a") || keys.has("A");
+  const right = keys.has("ArrowRight") || keys.has("d") || keys.has("D");
+  const jump =
+    keys.has(" ") ||
+    keys.has("z") ||
+    keys.has("Z") ||
+    keys.has("w") ||
+    keys.has("W");
+  const attack =
+    keys.has("x") || keys.has("X") || keys.has("j") || keys.has("J");
+  const enter =
+    keys.has("ArrowUp") ||
+    keys.has("e") ||
+    keys.has("E") ||
+    keys.has("f") ||
+    keys.has("F");
+
+  const moveMul = 1;
+  const jumpPower = JUMP;
+
+  let ax = 0;
+  if (left) ax -= 1;
+  if (right) ax += 1;
+  if (ax !== 0) facing = ax > 0 ? 1 : -1;
+  player.vx = ax * MOVE * moveMul;
+
+  if (jump) jumpBuffered = 0.12;
+  jumpBuffered = Math.max(0, jumpBuffered - dt);
+  coyote = Math.max(0, coyote - dt);
+  if (jumpBuffered > 0 && !flyTimer && (onGround || coyote > 0)) {
+    player.vy = -jumpPower;
+    onGround = false;
+    coyote = 0;
+    jumpBuffered = 0;
+  }
+
+  attackCd = Math.max(0, attackCd - dt);
+  attackT = Math.max(0, attackT - dt);
+  if (attack && !attackLatch) {
+    attackLatch = true;
+    tryAttack();
+  }
+  if (!attack) attackLatch = false;
+
+  if (enter && !interactLatch) {
+    interactLatch = true;
+    tryEnterDoor();
+  }
+  if (!enter) interactLatch = false;
+
+  const bagKey =
+    keys.has("1") || keys.has("2") || keys.has("3")
+      ? keys.has("1")
+        ? 0
+        : keys.has("2")
+          ? 1
+          : 2
+      : -1;
+  if (bagKey >= 0 && !bagLatch) {
+    bagLatch = true;
+    swapBagSlot(bagKey);
+  }
+  if (bagKey < 0) bagLatch = false;
+
+  if (scene === "world") {
+    for (const d of doors) {
+      if (
+        aabb(player, {
+          x: d.x - 36,
+          y: d.y - 8,
+          w: d.w + 72,
+          h: d.h + 16,
+        })
+      ) {
+        if (d.needsKey && !inventory.key) {
+          showHint("Bar kilitli — anahtar lazım");
+        } else {
+          showHint(`↑ / E — ${d.label} gir`);
+        }
+        break;
+      }
+    }
+  } else if (scene === "interior") {
+    if (
+      chest &&
+      !chest.opened &&
+      aabb(player, {
+        x: chest.x - 24,
+        y: chest.y - 16,
+        w: chest.w + 48,
+        h: chest.h + 32,
+      })
+    ) {
+      showHint("↑ / E — sandığı aç");
+    } else if (player.x < 150) {
+      showHint("↑ / E — dışarı çık");
+    }
+  }
+}
+function drawSky() {
+  const t = (level - 1) / (MAX_LEVEL - 1);
+  const top =
+    scene === "interior"
+      ? "#1a1520"
+      : `rgb(${26 + ((t * 20) | 0)},${39 - ((t * 10) | 0)},${64 - ((t * 20) | 0)})`;
+  const bot =
+    scene === "interior"
+      ? "#2a2438"
+      : `rgb(${61},${90 - ((t * 30) | 0)},${128 - ((t * 40) | 0)})`;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, top);
+  g.addColorStop(1, bot);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawHills() {
+  if (scene === "interior") return;
+  ctx.fillStyle = level >= 8 ? "#301820" : level >= 5 ? "#2a2035" : "#243552";
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 40) {
+    const wx = x + camX * 0.3;
+    const y = 320 + Math.sin(wx * 0.01) * 28 + Math.sin(wx * 0.003) * 18;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, H);
+  ctx.fill();
+}
+
+function drawPlatforms(list: Plat[]) {
+  for (const p of list) {
+    const x = p.x - camX;
+    if (x + p.w < -20 || x > W + 20) continue;
+    ctx.fillStyle = p.oneWay ? "#354a38" : "#2c3e2f";
+    ctx.fillRect(x, p.y, p.w, p.h);
+    ctx.fillStyle = p.oneWay ? "#6aaa58" : "#5a8f4a";
+    ctx.fillRect(x, p.y, p.w, 6);
+  }
+}
+
+function drawBuildings() {
+  for (const b of buildings) {
+    const x = b.x - camX;
+    if (x + b.w < -20 || x > W + 20) continue;
+    ctx.fillStyle = b.kind === "bar" ? "#4a3038" : "#3a3428";
+    ctx.fillRect(x, b.y, b.w, b.h);
+    ctx.fillStyle = b.kind === "bar" ? "#8a4050" : "#6a4030";
+    ctx.beginPath();
+    ctx.moveTo(x - 8, b.y + 8);
+    ctx.lineTo(x + b.w / 2, b.y - 28);
+    ctx.lineTo(x + b.w + 8, b.y + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#c9e6ff";
+    ctx.fillRect(x + 14, b.y + 28, 22, 22);
+    ctx.fillRect(x + b.w - 36, b.y + 28, 22, 22);
+    ctx.fillStyle = "#1a120e";
+    ctx.fillRect(x + b.w / 2 - 14, b.y + b.h - 52, 28, 52);
+    ctx.fillStyle = "#f5c518";
+    ctx.font = "10px monospace";
+    ctx.fillText(b.label, x + 12, b.y - 34);
+  }
+}
+
+function drawRocketParchment(px: number, py: number) {
+  ctx.fillStyle = "#e8d8a8";
+  ctx.fillRect(px, py, 48, 56);
+  ctx.strokeStyle = "#8a7040";
+  ctx.strokeRect(px, py, 48, 56);
+  // raccoon body
+  ctx.fillStyle = "#6a5a48";
+  ctx.fillRect(px + 14, py + 22, 20, 18);
+  ctx.fillStyle = "#c8b090";
+  ctx.fillRect(px + 16, py + 10, 16, 14);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(px + 14, py + 14, 20, 6);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(px + 18, py + 15, 3, 3);
+  ctx.fillRect(px + 27, py + 15, 3, 3);
+  // middle finger
+  ctx.fillStyle = "#c8b090";
+  ctx.fillRect(px + 34, py + 28, 5, 14);
+  ctx.fillRect(px + 32, py + 38, 9, 4);
+  ctx.fillStyle = "#8a2030";
+  ctx.font = "7px monospace";
+  ctx.fillText("!", px + 38, py + 26);
+}
+
+function drawInteriorDecor() {
+  if (!currentInterior) return;
+  const isBar = currentInterior.kind === "bar";
+  ctx.fillStyle = isBar ? "#2a1a18" : "#2a241c";
+  ctx.fillRect(0, 80, W, GROUND_Y - 80);
+  ctx.fillStyle = "#3a3028";
+  ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+
+  // exit door
+  ctx.fillStyle = "#1a120e";
+  ctx.fillRect(40, GROUND_Y - 70, 40, 70);
+  ctx.fillStyle = "#c9a227";
+  ctx.fillRect(68, GROUND_Y - 40, 6, 6);
+
+  if (isBar) {
+    // counter + bartender
+    ctx.fillStyle = "#4a3020";
+    ctx.fillRect(300, GROUND_Y - 48, 280, 48);
+    ctx.fillStyle = "#6a4830";
+    ctx.fillRect(300, GROUND_Y - 56, 280, 10);
+    ctx.fillStyle = "#5a4030";
+    ctx.fillRect(420, GROUND_Y - 100, 28, 44);
+    ctx.fillStyle = "#e8b896";
+    ctx.fillRect(424, GROUND_Y - 114, 20, 16);
+    ctx.fillStyle = "#8a2030";
+    ctx.fillRect(418, GROUND_Y - 118, 32, 8);
+    ctx.fillStyle = "#f5c518";
+    ctx.font = "10px monospace";
+    ctx.fillText("BARMEN", 450, GROUND_Y - 90);
+
+    // tables with beer mugs (no loot)
+    for (const tx of [160, 520]) {
+      ctx.fillStyle = "#6a4a28";
+      ctx.fillRect(tx, GROUND_Y - 36, 70, 12);
+      ctx.fillRect(tx + 8, GROUND_Y - 24, 10, 24);
+      ctx.fillRect(tx + 52, GROUND_Y - 24, 10, 24);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(tx + 16, GROUND_Y - 48, 10, 14);
+      ctx.fillRect(tx + 40, GROUND_Y - 48, 10, 14);
+      ctx.fillStyle = "#f0e080";
+      ctx.fillRect(tx + 18, GROUND_Y - 44, 6, 6);
+      ctx.fillRect(tx + 42, GROUND_Y - 44, 6, 6);
+    }
+
+    // barbarian NPCs
+    for (const bx of [200, 600]) {
+      ctx.fillStyle = "#4a3028";
+      ctx.fillRect(bx, GROUND_Y - 50, 22, 28);
+      ctx.fillStyle = "#e8b896";
+      ctx.fillRect(bx + 4, GROUND_Y - 62, 14, 14);
+      ctx.fillStyle = "#8a6030";
+      ctx.fillRect(bx + 2, GROUND_Y - 66, 18, 6);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(bx - 4, GROUND_Y - 40, 8, 18);
+    }
+
+    ctx.fillStyle = "#4a2030";
+    ctx.fillRect(340, 160, 180, 18);
+    ctx.fillStyle = "#f5c518";
+    ctx.font = "12px monospace";
+    ctx.fillText("KÖR FARE", 375, 174);
+
+    // upstairs chest / parchment
+    if (chest) {
+      const cx = chest.x - camX;
+      const cy = chest.y;
+      if (chest.opened && parchmentShown) {
+        drawRocketParchment(cx - 4, cy - 20);
+      } else if (!chest.opened) {
+        const colors: Record<ChestType, string> = {
+          wood: "#8a6030",
+          thorny: "#4a6830",
+          sticky: "#6a5080",
+          diamond: "#70c8e8",
+          obsidian: "#2a2038",
+          none: "#8a6030",
+        };
+        ctx.fillStyle = colors[chest.type];
+        ctx.fillRect(cx, cy, chest.w, chest.h);
+        ctx.fillStyle = "#c9a227";
+        ctx.fillRect(cx + 4, cy + 12, chest.w - 8, 4);
+        ctx.fillStyle = "#1a1a1a";
+        ctx.fillRect(cx + chest.w / 2 - 3, cy + 10, 6, 8);
+        ctx.fillStyle = "#f5c518";
+        ctx.font = "8px monospace";
+        ctx.fillText("SANDIK", cx - 4, cy - 6);
+      } else {
+        ctx.fillStyle = "#5a4030";
+        ctx.fillRect(cx, cy + 10, chest.w, chest.h - 10);
+        ctx.fillStyle = "#8a6840";
+        ctx.fillRect(cx - 2, cy, chest.w + 4, 12);
+      }
+    }
+  } else {
+    ctx.fillStyle = "#6a4a28";
+    ctx.fillRect(220, 330, 120, 14);
+    ctx.fillStyle = "#7ab0d8";
+    ctx.fillRect(700, 160, 70, 70);
+  }
+}
+function drawHandPotion(x: number, y: number) {
+  // drinking animation: raise bottle to mouth
+  if (drinkAnimT > 0 && drinkAnimId) {
+    const t = 1 - drinkAnimT / 0.55;
+    const color = POTIONS[drinkAnimId].color;
+    const lift = t * 18;
+    const bx = x + 4;
+    const by = y - lift;
+    ctx.fillStyle = color;
+    ctx.fillRect(bx, by + 4, 8, 12);
+    ctx.fillStyle = "#f0f4ff";
+    ctx.fillRect(bx + 1, by, 6, 4);
+    // liquid drip into mouth
+    if (t > 0.35) {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(bx + 3, by + 14, 2, 6);
+      ctx.globalAlpha = 1;
+    }
+    return;
+  }
+  if (!rightHand.item || rightHand.item.kind !== "potion") return;
+  const color = POTIONS[rightHand.item.id].color;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y + 4, 7, 11);
+  ctx.fillStyle = "#f0f4ff";
+  ctx.fillRect(x + 1, y, 5, 4);
+}
+
+function drawPlayer() {
+  const x = player.x - camX;
+  const y = player.y;
+  const blink = invuln > 0 && Math.floor(time * 20) % 2 === 0;
+  if (blink) return;
+
+  ctx.save();
+  if (invisTimer > 0) ctx.globalAlpha = 0.28;
+
+  if (flyTimer > 0) {
+    ctx.fillStyle = `rgba(74,168,255,${0.25 + Math.sin(time * 10) * 0.15})`;
+    ctx.beginPath();
+    ctx.ellipse(x + player.w / 2, y + player.h / 2, 28, 36, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (shieldTimer > 0 && shieldHp > 0) {
+    ctx.strokeStyle = `rgba(255,122,217,${0.4 + Math.sin(time * 8) * 0.2})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x + player.w / 2, y + player.h / 2, 26, 34, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  if (facing < 0) {
+    ctx.translate(x + player.w / 2, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-(x + player.w / 2), 0);
+  }
+
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(x + 15, y + player.h + 2, 13, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // boots / pants / chest / helm tint from armor
+  ctx.fillStyle = armor.boots ? "#8a9098" : "#2a2a32";
+  ctx.fillRect(x + 5, y + 44, 9, 8);
+  ctx.fillRect(x + 17, y + 44, 9, 8);
+
+  const legSwing = onGround
+    ? Math.sin(time * (Math.abs(player.vx) > 20 ? 14 : 0)) * 3
+    : 0;
+  ctx.fillStyle = armor.pants ? "#3a5068" : "#3a4558";
+  ctx.fillRect(x + 7, y + 30, 8, 15 + legSwing);
+  ctx.fillRect(x + 16, y + 30, 8, 15 - legSwing);
+
+  ctx.fillStyle = armor.chest ? "#6a7888" : "#5a6578";
+  ctx.fillRect(x + 5, y + 14, 20, 18);
+  ctx.fillStyle = "#c9a227";
+  ctx.fillRect(x + 5, y + 20, 20, 3);
+
+  ctx.fillStyle = "#8a2030";
+  ctx.fillRect(x + 2, y + 16, 5, 22);
+
+  ctx.fillStyle = "#e8b896";
+  ctx.fillRect(x + 8, y + 2, 14, 13);
+  ctx.fillStyle = armor.helm ? "#a0a8b0" : "#4a5568";
+  ctx.fillRect(x + 6, y - 2, 18, 8);
+  ctx.fillRect(x + 10, y - 8, 10, 8);
+  ctx.fillStyle = "#c9a227";
+  ctx.fillRect(x + 6, y + 4, 18, 2);
+  ctx.fillStyle = "#1a1a22";
+  ctx.fillRect(x + 10, y + 7, 3, 3);
+  ctx.fillRect(x + 16, y + 7, 3, 3);
+
+  drawHandPotion(x - 2, y + 18);
+
+  const wpn = equippedWeapon();
+  const swinging = attackT > 0;
+  if (wpn === "rifle") {
+    ctx.fillStyle = "#2a2a2a";
+    ctx.fillRect(x + 22, y + 18, swinging ? 40 : 28, 6);
+    ctx.fillStyle = "#6a4a28";
+    ctx.fillRect(x + 20, y + 20, 10, 8);
+  } else if (wpn === "sword") {
+    ctx.fillStyle = "#c0d0e0";
+    ctx.fillRect(
+      x + (swinging ? 24 : 22),
+      y + (swinging ? 8 : 14),
+      5,
+      swinging ? 28 : 22,
+    );
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(x + 20, y + (swinging ? 30 : 32), 10, 4);
+  } else if (wpn === "axe") {
+    ctx.fillStyle = "#6a4020";
+    ctx.fillRect(x + 24, y + 12, 5, 24);
+    ctx.fillStyle = "#a0a8b0";
+    ctx.fillRect(x + 20, y + 8, 16, 10);
+  } else if (wpn === "knife") {
+    ctx.fillStyle = "#d0d8e0";
+    ctx.fillRect(x + (swinging ? 28 : 24), y + 18, swinging ? 16 : 12, 4);
+    ctx.fillStyle = "#4a3020";
+    ctx.fillRect(x + 22, y + 17, 6, 6);
+  } else if (wpn === "lava") {
+    ctx.fillStyle = "#ff5020";
+    ctx.fillRect(x + 22, y + 14, 8, 20);
+    ctx.fillStyle = "#ffd24a";
+    ctx.fillRect(x + 24, y + 10, 4, 6);
+  } else if (wpn === "staff") {
+    ctx.fillStyle = "#6a4080";
+    ctx.fillRect(x + 26, y + 4, 4, 30);
+    ctx.fillStyle = "#b44dff";
+    ctx.beginPath();
+    ctx.arc(x + 28, y + 4, 7, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (swinging) {
+    ctx.fillStyle = "#e8b896";
+    ctx.fillRect(x + 22, y + 16, 20, 7);
+  } else {
+    ctx.fillStyle = "#e8b896";
+    ctx.fillRect(x + 22, y + 16, 7, 12);
+  }
+
+  // Enchanted weapon sparkle
+  if (wpn !== "fist" && weaponEnchanted[wpn]) {
+    ctx.fillStyle = `rgba(180,77,255,${0.5 + Math.sin(time * 12) * 0.4})`;
+    ctx.fillRect(x + 26, y + 12, 3, 3);
+    ctx.fillRect(x + 32, y + 20, 2, 2);
+    ctx.fillRect(x + 24, y + 24, 2, 2);
+  }
+
+  // Enchanted armor sparkle
+  for (const slot of ["helm", "chest", "pants", "boots"] as ArmorSlot[]) {
+    if (armor[slot] && armorEnchant[slot] > 0) {
+      ctx.fillStyle = `rgba(180,77,255,${0.35 + Math.sin(time * 9 + armorEnchant[slot] * 10) * 0.25})`;
+      if (slot === "helm") ctx.fillRect(x + 12, y - 4, 2, 2);
+      if (slot === "chest") ctx.fillRect(x + 14, y + 16, 2, 2);
+      if (slot === "pants") ctx.fillRect(x + 10, y + 34, 2, 2);
+      if (slot === "boots") ctx.fillRect(x + 20, y + 46, 2, 2);
+    }
+  }
+
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawEnemy(e: Enemy) {
+  if (!e.alive) return;
+  const x = e.x - camX;
+  const y = e.y;
+  if (x + e.w < -40 || x > W + 40) return;
+  ctx.save();
+  if (e.flash > 0) ctx.globalAlpha = 0.45;
+  if (e.unhittable) ctx.globalAlpha = 0.55;
+
+  if (e.kind === "goblin") {
+    ctx.fillStyle = "#2a4a28";
+    ctx.fillRect(x + 6, y + 36, 8, 8);
+    ctx.fillRect(x + 18, y + 36, 8, 8);
+    ctx.fillStyle = "#3d7a3a";
+    ctx.fillRect(x + 5, y + 14, 22, 24);
+    ctx.fillStyle = "#6aaa58";
+    ctx.fillRect(x + 8, y + 2, 16, 14);
+    ctx.fillStyle = "#1a2a18";
+    ctx.fillRect(x + 10, y + 6, 3, 3);
+    ctx.fillRect(x + 18, y + 6, 3, 3);
+  } else if (e.kind === "bat") {
+    const flap = Math.sin(time * 12) * 6;
+    ctx.fillStyle = "#6a4a8a";
+    ctx.beginPath();
+    ctx.moveTo(x + 14, y + 10);
+    ctx.lineTo(x - 6, y + 4 + flap);
+    ctx.lineTo(x + 8, y + 14);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + 14, y + 10);
+    ctx.lineTo(x + 34, y + 4 - flap);
+    ctx.lineTo(x + 20, y + 14);
+    ctx.fill();
+    ctx.fillStyle = "#2a1a3a";
+    ctx.fillRect(x + 10, y + 6, 12, 10);
+  } else if (e.kind === "archer") {
+    ctx.fillStyle = "#4a5538";
+    ctx.fillRect(x + 5, y + 16, 22, 24);
+    ctx.fillStyle = "#b09080";
+    ctx.fillRect(x + 8, y + 2, 16, 14);
+    ctx.fillStyle = "#ff4444";
+    ctx.fillRect(x + 11, y + 7, 3, 3);
+    ctx.fillRect(x + 18, y + 7, 3, 3);
+  } else {
+    const bk = e.bossKind ?? "ironface";
+    const bodyColor: Record<BossKind, string> = {
+      ironface: "#3a4058",
+      cloud: "#6a90b8",
+      mothman: "#4a3a58",
+      anaconda: "#2e7a3a",
+      kingkong: "#5a3a28",
+      firefox: "#c05020",
+      minotaur: "#6a5030",
+      creeper: "#1a2818",
+      sphinx: "#c9a060",
+      cerberus: "#4a2028",
+    };
+
+    if (bk === "anaconda") {
+      ctx.fillStyle = bodyColor.anaconda;
+      ctx.beginPath();
+      ctx.ellipse(
+        x + e.w * 0.55,
+        y + e.h * 0.55,
+        e.w * 0.48,
+        e.h * 0.42,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.fillStyle = "#ff3030";
+      ctx.fillRect(x + 8, y + 14, 5, 5);
+      ctx.fillRect(x + 18, y + 14, 5, 5);
+    } else if (bk === "mothman") {
+      const flap = Math.sin(time * 10) * 10;
+      ctx.fillStyle = "#6a5080";
+      ctx.beginPath();
+      ctx.moveTo(x + e.w / 2, y + 28);
+      ctx.lineTo(x - 18, y + 10 + flap);
+      ctx.lineTo(x + 10, y + 40);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + e.w / 2, y + 28);
+      ctx.lineTo(x + e.w + 18, y + 10 - flap);
+      ctx.lineTo(x + e.w - 10, y + 40);
+      ctx.fill();
+      ctx.fillStyle = bodyColor.mothman;
+      ctx.fillRect(x + 18, y + 20, e.w - 36, e.h - 28);
+      ctx.fillStyle = "#c09070";
+      ctx.fillRect(x + 22, y + 4, e.w - 44, 20);
+    } else if (bk === "firefox") {
+      ctx.fillStyle = bodyColor.firefox;
+      ctx.fillRect(x + 10, y + 20, e.w - 20, e.h - 28);
+      ctx.fillStyle = "#ffd24a";
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + e.w - 8, y + 30 + i * 10);
+        ctx.lineTo(x + e.w + 18, y + 20 + i * 12 + Math.sin(time * 8 + i) * 4);
+        ctx.lineTo(x + e.w - 4, y + 38 + i * 8);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#ffe0a0";
+      ctx.fillRect(x + 16, y + 4, e.w - 40, 20);
+      ctx.fillStyle = "#ff3030";
+      ctx.fillRect(x + 22, y + 10, 5, 5);
+      ctx.fillRect(x + e.w - 36, y + 10, 5, 5);
+    } else if (bk === "kingkong") {
+      ctx.fillStyle = bodyColor.kingkong;
+      ctx.fillRect(x + 8, y + 28, e.w - 16, e.h - 40);
+      ctx.fillRect(x + 4, y + 40, 16, 28);
+      ctx.fillRect(x + e.w - 20, y + 40, 16, 28);
+      ctx.fillStyle = "#8a6a50";
+      ctx.fillRect(x + 20, y + 4, e.w - 40, 28);
+      ctx.fillStyle = "#1a1010";
+      ctx.fillRect(x + 28, y + 14, 6, 6);
+      ctx.fillRect(x + e.w - 34, y + 14, 6, 6);
+    } else if (bk === "creeper") {
+      const flap = Math.sin(time * 14) * 8;
+      ctx.fillStyle = "#3a5030";
+      ctx.beginPath();
+      ctx.moveTo(x + e.w / 2, y + 20);
+      ctx.lineTo(x - 8, y + 8 + flap);
+      ctx.lineTo(x + 12, y + 30);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + e.w / 2, y + 20);
+      ctx.lineTo(x + e.w + 8, y + 8 - flap);
+      ctx.lineTo(x + e.w - 12, y + 30);
+      ctx.fill();
+      ctx.fillStyle = bodyColor.creeper;
+      ctx.fillRect(x + 14, y + 16, e.w - 28, e.h - 28);
+      ctx.fillStyle = "#80ff60";
+      ctx.fillRect(x + 22, y + 24, 5, 5);
+      ctx.fillRect(x + e.w - 27, y + 24, 5, 5);
+    } else if (bk === "sphinx") {
+      ctx.fillStyle = bodyColor.sphinx;
+      ctx.fillRect(x + 10, y + 30, e.w - 20, e.h - 40);
+      ctx.fillRect(x + 20, y + 8, e.w - 50, 28);
+      ctx.fillStyle = "#8a6840";
+      ctx.beginPath();
+      ctx.moveTo(x + e.w - 20, y + 40);
+      ctx.lineTo(x + e.w + 20, y + 50);
+      ctx.lineTo(x + e.w - 10, y + 70);
+      ctx.fill();
+      ctx.fillStyle = "#1a1010";
+      ctx.fillRect(x + 28, y + 16, 5, 5);
+    } else if (bk === "cerberus") {
+      ctx.fillStyle = bodyColor.cerberus;
+      ctx.fillRect(x + 16, y + 36, e.w - 32, e.h - 44);
+      const heads = [0.18, 0.5, 0.82];
+      for (let i = 0; i < 3; i++) {
+        const hx = x + e.w * heads[i]! - 14;
+        const dead = e.headHp && e.headHp[i]! <= 0;
+        ctx.fillStyle = dead ? "#2a1010" : "#6a3038";
+        ctx.fillRect(hx, y + 4, 28, 36);
+        if (!dead) {
+          ctx.fillStyle = "#ff4040";
+          ctx.fillRect(hx + 6, y + 16, 5, 5);
+          ctx.fillRect(hx + 16, y + 16, 5, 5);
+        }
+        // per-head HP bar
+        if (e.headHp) {
+          ctx.fillStyle = "#1a1010";
+          ctx.fillRect(hx, y - 8 - i * 2, 28, 4);
+          ctx.fillStyle = dead ? "#333" : "#e04040";
+          ctx.fillRect(hx, y - 8 - i * 2, 28 * (e.headHp[i]! / 1800), 4);
+        }
+      }
+    } else if (bk === "minotaur") {
+      ctx.fillStyle = bodyColor.minotaur;
+      ctx.fillRect(x + 10, y + 28, e.w - 20, e.h - 36);
+      ctx.fillStyle = "#c09070";
+      ctx.fillRect(x + 18, y + 6, e.w - 36, 26);
+      ctx.fillStyle = "#e8e0d0";
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 10);
+      ctx.lineTo(x - 6, y - 10);
+      ctx.lineTo(x + 16, y + 8);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + e.w - 8, y + 10);
+      ctx.lineTo(x + e.w + 6, y - 10);
+      ctx.lineTo(x + e.w - 16, y + 8);
+      ctx.fill();
+    } else if (bk === "cloud") {
+      ctx.fillStyle = "#a8c8e8";
+      ctx.beginPath();
+      ctx.arc(x + 18, y + 16, 14, 0, Math.PI * 2);
+      ctx.arc(x + e.w / 2, y + 10, 18, 0, Math.PI * 2);
+      ctx.arc(x + e.w - 18, y + 16, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = bodyColor.cloud;
+      ctx.fillRect(x + 14, y + 28, e.w - 28, e.h - 36);
+    } else {
+      ctx.fillStyle = "#1a1010";
+      ctx.fillRect(x + 10, y + e.h - 12, 16, 12);
+      ctx.fillRect(x + e.w - 26, y + e.h - 12, 16, 12);
+      ctx.fillStyle = bodyColor[bk];
+      ctx.fillRect(x + 6, y + 24, e.w - 12, e.h - 36);
+      ctx.fillStyle = "#c09070";
+      ctx.fillRect(x + 14, y + 2, e.w - 28, 26);
+      if (bk === "ironface") {
+        ctx.fillStyle = "#8a9098";
+        ctx.fillRect(x + 16, y + 8, e.w - 32, 14);
+      }
+      ctx.fillStyle = "#ff3030";
+      ctx.fillRect(x + 20, y + 12, 6, 6);
+      ctx.fillRect(x + e.w - 26, y + 12, 6, 6);
+    }
+
+    if (e.telegraph > 0) {
+      ctx.fillStyle = "rgba(255,120,40,0.35)";
+      ctx.fillRect(x - 8, y - 8, e.w + 16, e.h + 8);
+    }
+    if (bk !== "cerberus") {
+      const bw = e.w - 10;
+      ctx.fillStyle = "#1a1010";
+      ctx.fillRect(x + 5, y - 22, bw, 6);
+      ctx.fillStyle = "#e04040";
+      ctx.fillRect(x + 5, y - 22, bw * (e.hp / e.maxHp), 6);
+    }
+    ctx.fillStyle = "#f5c518";
+    ctx.font = "8px monospace";
+    ctx.fillText(e.name, x, y - 28);
+  }
+  ctx.restore();
+}
+
+function drawWorldItem(it: WorldItem) {
+  if (it.taken) return;
+  const x = it.x - camX;
+  const y = it.y + Math.sin(it.bob) * 4;
+  if (x < -30 || x > W + 30) return;
+  if (it.kind === "coin") {
+    ctx.fillStyle = "#ffd76a";
+    ctx.beginPath();
+    ctx.arc(x + 7, y + 7, 7, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (it.kind === "key") {
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(x + 2, y + 6, 14, 5);
+    ctx.beginPath();
+    ctx.arc(x + 4, y + 8, 6, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const pulse = 0.7 + Math.sin(time * 5) * 0.3;
+    ctx.fillStyle = `rgba(154,208,255,${pulse})`;
+    ctx.beginPath();
+    ctx.arc(x + 11, y + 11, 11, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawHazards() {
+  for (const h of hazards) {
+    const x = h.x - camX;
+    if (h.kind === "lava") {
+      ctx.fillStyle = "#c03010";
+      ctx.fillRect(x, h.y, h.w, h.h);
+      ctx.fillStyle = "#ff6020";
+      ctx.fillRect(x, h.y, h.w, 8);
+    } else if (h.kind === "platform") {
+      ctx.fillStyle = "#5a6878";
+      ctx.fillRect(x, h.y, h.w, h.h);
+      ctx.fillStyle = "#ffd24a";
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(x + 10 + i * 18, h.y - 4, 3, 3);
+      }
+    } else {
+      ctx.fillStyle = "#ff4040";
+      ctx.fillRect(x, h.y, h.w, h.h);
+      ctx.fillStyle = "#1a1010";
+      ctx.fillRect(x + 4, h.y - 6, 4, 6);
+      ctx.fillRect(x + h.w - 8, h.y - 6, 4, 6);
+    }
+  }
+}
+
+function drawPlatTraps() {
+  for (const t of platTraps) {
+    const x = t.x - camX;
+    if (x + t.w < -10 || x > W + 10) continue;
+    ctx.fillStyle = "#4a3030";
+    ctx.fillRect(x, t.y + 8, t.w, 4);
+    ctx.fillStyle = "#c0c8d0";
+    const spikes = 5;
+    for (let i = 0; i < spikes; i++) {
+      const sx = x + 3 + i * ((t.w - 6) / (spikes - 1));
+      ctx.beginPath();
+      ctx.moveTo(sx, t.y + 10);
+      ctx.lineTo(sx + 3, t.y);
+      ctx.lineTo(sx + 6, t.y + 10);
+      ctx.fill();
+    }
+  }
+}
+
+function drawGroundDrops() {
+  for (const d of groundDrops) {
+    const x = d.x - camX;
+    const y = d.y + Math.sin(d.bob) * 3;
+    if (x < -40 || x > W + 40) continue;
+    if (d.kind === "weapon") {
+      ctx.fillStyle = "#6a4a28";
+      ctx.fillRect(x, y + 6, d.w, 6);
+      ctx.fillStyle = "#c0d0e0";
+      ctx.fillRect(x + 4, y + 2, d.w - 6, 4);
+    } else {
+      ctx.fillStyle = "#708090";
+      ctx.fillRect(x + 2, y, d.w - 4, d.h);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(x + 4, y + 6, d.w - 8, 3);
+    }
+    if (d.enchanted || d.sparkle > 0) {
+      const pulse = 0.4 + Math.sin(time * 14) * 0.35;
+      ctx.fillStyle = `rgba(180,77,255,${pulse})`;
+      ctx.fillRect(x + 2, y - 4, 3, 3);
+      ctx.fillRect(x + d.w - 6, y + 2, 3, 3);
+      ctx.fillRect(x + d.w / 2, y + d.h, 2, 2);
+    }
+  }
+}
+
+function drawAllies() {
+  for (const a of allies) {
+    if (!a.alive) continue;
+    const x = a.x - camX;
+    const y = a.y;
+    if (x + a.w < -20 || x > W + 20) continue;
+    ctx.fillStyle = "#4a3068";
+    ctx.fillRect(x + 4, y + 14, 14, 16);
+    ctx.fillStyle = "#e8b896";
+    ctx.fillRect(x + 5, y + 2, 12, 12);
+    ctx.fillStyle = "#ff7ad9";
+    ctx.fillRect(x + 4, y, 14, 4);
+    // magic staff
+    const sx = a.facing > 0 ? x + 16 : x - 2;
+    ctx.fillStyle = "#6a4080";
+    ctx.fillRect(sx, y + 4, 3, 26);
+    ctx.fillStyle = "#b44dff";
+    ctx.beginPath();
+    ctx.arc(sx + 1, y + 4, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(180,77,255,${0.4 + Math.sin(time * 10) * 0.3})`;
+    ctx.fillRect(sx - 1, y + 2, 2, 2);
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(x + 2, y - 6, a.w - 4, 3);
+    ctx.fillStyle = "#ff7ad9";
+    ctx.fillRect(x + 2, y - 6, (a.w - 4) * (a.hp / a.maxHp), 3);
+  }
+}
+
+function drawThrownBottles() {
+  for (const b of thrownBottles) {
+    if (!b.alive) continue;
+    const x = b.x - camX;
+    const y = b.y;
+    ctx.save();
+    ctx.translate(x + b.w / 2, y + b.h / 2);
+    ctx.rotate(b.spin);
+    ctx.fillStyle = b.color;
+    ctx.fillRect(-4, -6, 8, 12);
+    ctx.fillStyle = "#f0f4ff";
+    ctx.fillRect(-3, -8, 6, 4);
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillRect(-2, -4, 2, 4);
+    ctx.restore();
+    // trail
+    ctx.fillStyle = b.color;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(x - b.vx * 0.02, y - b.vy * 0.02, 4, 4);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPotionFx() {
+  if (pourAnimT > 0) {
+    const x = pourAnimX - camX;
+    const y = pourAnimY;
+    ctx.strokeStyle = `rgba(180,77,255,${0.5 + Math.sin(time * 20) * 0.3})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 28);
+    ctx.lineTo(x + Math.sin(time * 30) * 3, y);
+    ctx.stroke();
+    ctx.fillStyle = "#b44dff";
+    ctx.fillRect(x - 5, y - 34, 10, 12);
+    ctx.fillStyle = "#f0f4ff";
+    ctx.fillRect(x - 3, y - 38, 6, 4);
+  }
+}
+
+function drawProjectiles() {
+  for (const p of projectiles) {
+    if (!p.alive) continue;
+    const x = p.x - camX;
+    if (p.kind === "arrow" || p.kind === "horn") {
+      ctx.fillStyle = "#d0c090";
+      ctx.fillRect(x, p.y + 2, p.w, 3);
+      ctx.fillStyle = "#888";
+      ctx.fillRect(x + (p.vx >= 0 ? p.w - 4 : 0), p.y, 4, 6);
+    } else if (p.kind === "spit") {
+      ctx.fillStyle = "#7dffb3";
+      ctx.beginPath();
+      ctx.arc(x + 5, p.y + 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "rain") {
+      ctx.fillStyle = "#7ab0ff";
+      ctx.fillRect(x + 2, p.y, 4, 12);
+    } else if (p.kind === "poison") {
+      ctx.fillStyle = "#ff3a3a";
+      ctx.beginPath();
+      ctx.arc(x + 7, p.y + 5, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "bullet") {
+      ctx.fillStyle = "#f5c518";
+      ctx.fillRect(x, p.y + 1, p.w, 4);
+    } else if (p.kind === "fire" || p.kind === "breath") {
+      ctx.fillStyle = "#ff5020";
+      ctx.beginPath();
+      ctx.arc(x + 8, p.y + 6, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffd24a";
+      ctx.beginPath();
+      ctx.arc(x + 8, p.y + 6, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "magic" || p.kind === "bolt") {
+      ctx.fillStyle = "#b44dff";
+      ctx.beginPath();
+      ctx.arc(x + 7, p.y + 7, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x + 5, p.y + 4, 4, 6);
+    } else if (p.kind === "cotton") {
+      ctx.fillStyle = "#f4f0e8";
+      ctx.beginPath();
+      ctx.arc(x + 6, p.y + 6, 7, 0, Math.PI * 2);
+      ctx.arc(x + 12, p.y + 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "blade") {
+      ctx.fillStyle = "#c0d0e0";
+      ctx.save();
+      ctx.translate(x + 9, p.y + 9);
+      ctx.rotate(time * 18);
+      ctx.fillRect(-10, -2, 20, 4);
+      ctx.fillRect(-2, -10, 4, 20);
+      ctx.restore();
+    } else if (p.kind === "head") {
+      ctx.fillStyle = "#3a5030";
+      ctx.fillRect(x, p.y, p.w, p.h);
+      ctx.fillStyle = "#80ff60";
+      ctx.fillRect(x + 4, p.y + 6, 4, 4);
+      ctx.fillRect(x + 12, p.y + 6, 4, 4);
+    } else if (p.kind === "spike") {
+      ctx.fillStyle = "#c9a060";
+      ctx.beginPath();
+      ctx.moveTo(x + 5, p.y);
+      ctx.lineTo(x + 10, p.y + p.h);
+      ctx.lineTo(x, p.y + p.h);
+      ctx.fill();
+    } else if (p.kind === "anvil") {
+      ctx.fillStyle = "#4a4a50";
+      ctx.fillRect(x, p.y + 8, p.w, p.h - 8);
+      ctx.fillRect(x + 4, p.y, p.w - 8, 10);
+    } else if (p.kind === "spark") {
+      ctx.fillStyle = "#ffd24a";
+      ctx.fillRect(x, p.y, 4, 4);
+    } else {
+      ctx.fillStyle = "#5dff7a";
+      ctx.beginPath();
+      ctx.arc(x + 6, p.y + 6, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life * 2);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - camX, p.y, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function resetGame() {
+  level = 1;
+  Object.assign(player, {
+    x: 80,
+    y: GROUND_Y - 52,
+    vx: 0,
+    vy: 0,
+    hp: 450,
+    maxHp: 450,
+  });
+  inventory.coins = 0;
+  inventory.key = false;
+  inventory.medallion = false;
+  leftHand.item = null;
+  rightHand.item = null;
+  bag[0] = null;
+  bag[1] = null;
+  bag[2] = null;
+  armor.helm = false;
+  armor.chest = false;
+  armor.pants = false;
+  armor.boots = false;
+  for (const k of Object.keys(weaponBonus) as WeaponId[]) weaponBonus[k] = 0;
+  for (const k of Object.keys(weaponEnchanted) as WeaponId[])
+    weaponEnchanted[k] = false;
+  for (const k of Object.keys(armorEnchant) as ArmorSlot[]) armorEnchant[k] = 0;
+  facing = 1;
+  invuln = 0;
+  attackT = 0;
+  attackCd = 0;
+  flyTimer = 0;
+  invisTimer = 0;
+  shieldHp = 0;
+  shieldTimer = 0;
+  venomDot = 0;
+  venomAcc = 0;
+  enchantSparkleT = 0;
+  drinkAnimT = 0;
+  drinkAnimId = null;
+  pourAnimT = 0;
+  potionBusy = false;
+  projectiles.length = 0;
+  hazards.length = 0;
+  platTraps.length = 0;
+  groundDrops.length = 0;
+  allies.length = 0;
+  thrownBottles.length = 0;
+  camX = 0;
+  scene = "world";
+  currentInterior = null;
+  chest = null;
+  dialogQueue = [];
+  dialogEl.classList.remove("show");
+  buildWorld();
+  updateHud();
+  queueDialog([
+    {
+      name: "???",
+      text: "İçilen: Pigeon / TheReeker / Recovery. Atılan: Krypton. Yere atılan: Enchant / Splındog.",
+    },
+    { name: "SEN", text: "Kardeşimi bulacağım." },
+    {
+      name: "???",
+      text: "Enchant için eşyayı Q/G/U ile yere koy, iksiri üstüne at. Splındog asalı yoldaş çağırır.",
+    },
+  ]);
+}
+
+function frame(dt: number) {
+  time += dt;
+  if (shake > 0) shake = Math.max(0, shake - dt * 30);
+
+  if (state === "playing" || state === "dialog") {
+    if (state === "playing") {
+      handleInput(dt);
+      resolvePlayer(dt);
+      tickVenomDot(dt);
+      updateEnemies(dt);
+      updateAllies(dt);
+      updateHazards(dt);
+      updatePlatTraps(dt);
+      updateItems(dt);
+      updateGroundDrops(dt);
+      updateProjectiles(dt);
+      updateThrownBottles(dt);
+      updatePotionAnims(dt);
+    } else {
+      handleInput(dt);
+    }
+    updateParticles(dt);
+    invuln = Math.max(0, invuln - dt);
+
+    if (scene === "world") {
+      camX = player.x + player.w / 2 - W * 0.35;
+      camX = Math.max(0, Math.min(camX, WORLD_W - W));
+    } else {
+      camX = 0;
+    }
+
+    if (storyTimer > 0) {
+      storyTimer -= dt;
+      if (storyTimer <= 0) storyEl.classList.remove("show");
+    }
+    if (hintTimer > 0) {
+      hintTimer -= dt;
+      if (hintTimer <= 0) hintToast.classList.remove("show");
+    }
+
+    if (state === "playing") updateHud();
+  } else {
+    updateParticles(dt);
+  }
+
+  drawSky();
+  const ox = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+  const oy = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+  ctx.save();
+  ctx.translate(ox, oy);
+  drawHills();
+  if (scene === "interior") {
+    drawInteriorDecor();
+    drawPlatforms(interiorPlatforms);
+    drawGroundDrops();
+    drawAllies();
+  } else {
+    drawBuildings();
+    drawPlatforms(platforms);
+    drawPlatTraps();
+    drawHazards();
+    drawGroundDrops();
+    for (const it of items) drawWorldItem(it);
+    for (const e of enemies) drawEnemy(e);
+    drawAllies();
+  }
+  drawProjectiles();
+  drawThrownBottles();
+  drawPotionFx();
+  if (state !== "title") drawPlayer();
+  drawParticles();
+  ctx.restore();
+}
+
+let last = performance.now();
+function loop(now: number) {
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  frame(dt);
+  requestAnimationFrame(loop);
+}
+
+function startGame() {
+  ensureAudio();
+  titleEl.classList.add("hidden");
+  wrap.classList.add("playing");
+  hideOverlay();
+  resetGame();
+  state = dialogQueue.length ? "dialog" : "playing";
+  if (state === "dialog") showDialogLine();
+}
+
+function restartFromOverlay() {
+  ensureAudio();
+  hideOverlay();
+  resetGame();
+  state = dialogQueue.length ? "dialog" : "playing";
+  if (state === "dialog") showDialogLine();
+}
+
+window.addEventListener("keydown", (e) => {
+  keys.add(e.key);
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key))
+    e.preventDefault();
+  if (e.key === "r" || e.key === "R") {
+    if (
+      state === "playing" ||
+      state === "dead" ||
+      state === "win" ||
+      state === "dialog"
+    ) {
+      hideOverlay();
+      resetGame();
+      state = dialogQueue.length ? "dialog" : "playing";
+      if (state === "dialog") showDialogLine();
+    }
+  }
+  if (e.key === "c" || e.key === "C") usePotion();
+  if ((e.key === "q" || e.key === "Q") && !e.repeat) dropLeftHand();
+  if ((e.key === "g" || e.key === "G") && !e.repeat) dropRightHand();
+  if ((e.key === "u" || e.key === "U") && !e.repeat) dropArmorPiece();
+  if (e.key === "Enter" && state === "title") startGame();
+});
+window.addEventListener("keyup", (e) => keys.delete(e.key));
+
+document.querySelector("#btn-start")!.addEventListener("click", startGame);
+document
+  .querySelector("#btn-restart")!
+  .addEventListener("click", restartFromOverlay);
+
+function bindHold(sel: string, key: string) {
+  const el = document.querySelector<HTMLElement>(sel)!;
+  const on = (ev: Event) => {
+    ev.preventDefault();
+    keys.add(key);
+  };
+  const off = (ev: Event) => {
+    ev.preventDefault();
+    keys.delete(key);
+  };
+  el.addEventListener("pointerdown", on);
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointerleave", off);
+  el.addEventListener("pointercancel", off);
+}
+bindHold("#btn-left", "ArrowLeft");
+bindHold("#btn-right", "ArrowRight");
+bindHold("#btn-jump", " ");
+bindHold("#btn-punch", "x");
+bindHold("#btn-enter", "e");
+bindHold("#btn-bag1", "1");
+bindHold("#btn-bag2", "2");
+bindHold("#btn-bag3", "3");
+document.querySelector("#btn-potion")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  usePotion();
+});
+
+state = "title";
+buildWorld();
+player.x = 200;
+requestAnimationFrame(loop);
+
+if (typeof location !== "undefined" && location.search.includes("debug=1")) {
+  (window as unknown as { wtmDebug: Record<string, unknown> }).wtmDebug = {
+    grantItem,
+    grantArmor,
+    swapBagSlot,
+    tryEnterDoor,
+    leftHand,
+    rightHand,
+    bag,
+    armor,
+    inventory,
+    player,
+    buildWorld,
+    updateHud,
+    getState: () => state,
+    setLevel: (n: number) => {
+      level = n;
+      scene = "world";
+      currentInterior = null;
+      chest = null;
+      player.x = 80;
+      player.y = GROUND_Y - player.h;
+      buildWorld();
+      updateHud();
+    },
+  };
+}
