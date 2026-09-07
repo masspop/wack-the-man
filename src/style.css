@@ -33,6 +33,7 @@ body {
   padding: 0.5rem;
   position: relative;
 }
+/* —— Title —— */
 .title-screen {
   position: absolute;
   inset: 0;
@@ -128,6 +129,7 @@ body {
   color: #8a93a8;
   line-height: 1.4;
 }
+/* —— Game wrap —— */
 #wrap {
   width: min(960px, 100%);
   display: none;
@@ -254,6 +256,19 @@ body {
 .ico.potion {
   background: var(--mint);
   clip-path: polygon(30% 0, 70% 0, 70% 25%, 85% 100%, 15% 100%, 30% 25%);
+}
+.ico.potion.heal {
+  background: #3dff7a;
+}
+.ico.potion.poison {
+  background: #ff3a3a;
+}
+.ico.potion.fly {
+  background: #4aa8ff;
+}
+.slot.selected {
+  outline: 2px solid #f5c518;
+  outline-offset: 1px;
 }
 .ico.key {
   background: var(--gold);
