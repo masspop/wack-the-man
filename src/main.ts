@@ -1399,7 +1399,6 @@ function spawnAllies(atX?: number, atY?: number) {
     });
   }
   burst(ox + 20, oy + 10, "#ff7ad9", 22);
-## `src/main.ts` — Parça B (2/3)
   for (let i = 0; i < 10; i++) {
     particles.push({
       x: ox + 20,
