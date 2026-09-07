@@ -1,12 +1,14 @@
-                                                                                                  
 <!doctype html>
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#070b14" />
     <title>Wack The Man</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -22,8 +24,11 @@
           </p>
           <button type="button" id="btn-start">OYUNA GİR</button>
           <p class="controls-hint">
-            ←→ hareket · Z/Space zıpla · X saldır · Q/G bırak · U zırh · C
-            iksir (iç / at / yere at) · ↑/E kapı/sandık · R yeniden
+            PC: ←→ hareket · Z/Space zıpla · X saldır · Q/G bırak · U zırh · C
+            iksir · ↑/E kapı/sandık · R yeniden
+          </p>
+          <p class="controls-hint mobile-hint">
+            Telefon: alttaki tuşlarla oyna · diyalog için kutuya dokun
           </p>
         </div>
       </div>
@@ -98,7 +103,7 @@
         <div id="dialog" aria-hidden="true">
           <div class="dialog-name" id="dialog-name"></div>
           <div class="dialog-text" id="dialog-text"></div>
-          <div class="dialog-hint">X / Enter — devam</div>
+          <div class="dialog-hint">Dokun / X / Enter — devam</div>
         </div>
 
         <div id="story"></div>
@@ -114,9 +119,11 @@
 
         <div id="pad" aria-label="Dokunmatik kontroller">
           <div class="pad-left">
-            <button type="button" id="btn-left">◀</button>
-            <button type="button" id="btn-right">▶</button>
+            <button type="button" id="btn-left" aria-label="Sol">◀</button>
+            <button type="button" id="btn-right" aria-label="Sağ">▶</button>
             <button type="button" id="btn-enter" class="btn-enter">Kapı</button>
+            <button type="button" id="btn-drop" class="btn-drop">Bırak</button>
+            <button type="button" id="btn-armor" class="btn-armor">Zırh</button>
           </div>
           <div class="pad-right">
             <button type="button" id="btn-bag1" class="btn-bag">1</button>
@@ -132,5 +139,3 @@
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
-
-    
