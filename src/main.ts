@@ -1,9 +1,11 @@
+
 import "./style.css";
 type Rect = { x: number; y: number; w: number; h: number };
 type Zone = "village" | "forest" | "ruins" | "boss";
 type Scene = "world" | "interior";
 type EnemyKind = "slime" | "bat" | "soldier" | "thug" | "midboss" | "boss";
 type WeaponId = "fist" | "knife" | "sword" | "axe" | "rifle";
+type DrinkId = "heal" | "poison" | "fly";
 type PlaceKind = "table" | "window" | "barrel";
 type GameState = "title" | "playing" | "dialog" | "win" | "dead";
 type Enemy = Rect & {
@@ -30,6 +32,36 @@ type WeaponPickup = Rect & {
   place: PlaceKind;
   taken: boolean;
   bob: number;
+};
+type DrinkPickup = Rect & {
+  drink: DrinkId;
+  taken: boolean;
+  bob: number;
+};
+type PoisonShot = Rect & {
+  vx: number;
+  life: number;
+  alive: boolean;
+};
+const DRINKS: Record<
+  DrinkId,
+  { label: string; color: string; hint: string }
+> = {
+  heal: {
+    label: "Can İksiri",
+    color: "#3dff7a",
+    hint: "Yeşil can iksiri · C / İksir ile iç (+280)",
+  },
+  poison: {
+    label: "Zehir İksiri",
+    color: "#ff3a3a",
+    hint: "Kırmızı zehir · C / İksir ile fırlat",
+  },
+  fly: {
+    label: "Uçuş İksiri",
+    color: "#4aa8ff",
+    hint: "Mavi uçuş · C / İksir ile iç (5 sn)",
+  },
 };
 type Door = Rect & {
   id: string;
@@ -85,6 +117,11 @@ const hpText = document.querySelector<HTMLElement>("#hp-text")!;
 const zoneName = document.querySelector<HTMLElement>("#zone-name")!;
 const coinCount = document.querySelector<HTMLElement>("#coin-count")!;
 const potionCount = document.querySelector<HTMLElement>("#potion-count")!;
+const poisonCount = document.querySelector<HTMLElement>("#poison-count")!;
+const flyCount = document.querySelector<HTMLElement>("#fly-count")!;
+const healSlot = document.querySelector<HTMLElement>("#heal-slot")!;
+const poisonSlot = document.querySelector<HTMLElement>("#poison-slot")!;
+const flySlot = document.querySelector<HTMLElement>("#fly-slot")!;
 const keySlot = document.querySelector<HTMLElement>("#key-slot")!;
 const medalSlot = document.querySelector<HTMLElement>("#medal-slot")!;
 const weaponNameEl = document.querySelector<HTMLElement>("#weapon-name")!;
@@ -123,10 +160,14 @@ let interactLatch = false;
 let attackLatch = false;
 let dialogQueue: DialogLine[] = [];
 let dialogAdvanceLatch = false;
+let flyTimer = 0;
+let selectedDrink: DrinkId = "heal";
 const inventory = {
   coins: 0,
   key: false,
   potion: 0,
+  poison: 0,
+  fly: 0,
   medallion: false,
 };
 const player: Rect & { vx: number; vy: number; hp: number; maxHp: number } = {
@@ -147,10 +188,13 @@ const gates: (Rect & { open: boolean })[] = [];
 const doors: Door[] = [];
 const buildings: (Rect & { kind: "house" | "bar"; label: string })[] = [];
 const weaponPickups: WeaponPickup[] = [];
+const drinkPickups: DrinkPickup[] = [];
+const poisonShots: PoisonShot[] = [];
 const interiorPlatforms: Rect[] = [];
 const interiors: Record<string, InteriorDef> = {};
 let currentInterior: InteriorDef | null = null;
 let returnPos = { x: 80, y: GROUND_Y - 52 };
+// —— Audio (hafif) ——
 let audioCtx: AudioContext | null = null;
 function ensureAudio() {
   if (!audioCtx) audioCtx = new AudioContext();
@@ -253,7 +297,18 @@ function addWeapon(weaponId: WeaponId, x: number, y: number, place: PlaceKind) {
     w: 22,
     h: 18,
     taken: false,
-    bob: Math.random() * 6,
+    bob: Math.random() * 4,
+  });
+}
+function addDrink(drink: DrinkId, x: number, y: number) {
+  drinkPickups.push({
+    drink,
+    x,
+    y,
+    w: 16,
+    h: 18,
+    taken: false,
+    bob: Math.random() * 5,
   });
 }
 function burst(x: number, y: number, color: string, n = 10) {
@@ -306,10 +361,12 @@ function buildInteriorsMeta() {
 function buildInteriorRoom(def: InteriorDef) {
   interiorPlatforms.length = 0;
   weaponPickups.length = 0;
+  drinkPickups.length = 0;
   interiorPlatforms.push({ x: 0, y: GROUND_Y, w: INTERIOR_W, h: 24 });
   interiorPlatforms.push({ x: 200, y: 340, w: 140, h: 18 });
   interiorPlatforms.push({ x: 520, y: 300, w: 160, h: 18 });
   interiorPlatforms.push({ x: 760, y: 350, w: 120, h: 18 });
+  // Random weapon placements — may or may not spawn
   const pool: WeaponId[] = ["knife", "sword", "axe", "rifle"];
   const spots: { x: number; y: number; place: PlaceKind }[] = [
     { x: 250, y: 318, place: "table" },
@@ -323,8 +380,24 @@ function buildInteriorRoom(def: InteriorDef) {
     const wpn = pool[rand(0, pool.length - 1)]!;
     addWeapon(wpn, spot.x, spot.y, spot.place);
   }
+  // guarantee at least something sometimes in bar
   if (def.kind === "bar" && weaponPickups.length === 0 && chance(0.7)) {
     addWeapon(chance(0.5) ? "knife" : "sword", 260, 318, "table");
+  }
+  // Bar drinks: green heal, red poison, blue fly
+  if (def.kind === "bar") {
+    const drinkSpots = [
+      { x: 310, y: 318 },
+      { x: 640, y: 278 },
+      { x: 470, y: GROUND_Y - 42 },
+      { x: 780, y: GROUND_Y - 42 },
+    ];
+    const kinds: DrinkId[] = ["heal", "poison", "fly"];
+    const order = [...kinds].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < order.length; i++) {
+      const spot = drinkSpots[i]!;
+      addDrink(order[i]!, spot.x, spot.y);
+    }
   }
 }
 function buildWorld() {
@@ -336,6 +409,8 @@ function buildWorld() {
   doors.length = 0;
   buildings.length = 0;
   weaponPickups.length = 0;
+  drinkPickups.length = 0;
+  poisonShots.length = 0;
   particles.length = 0;
   buildInteriorsMeta();
   addPlat(0, GROUND_Y, 1500);
@@ -371,6 +446,7 @@ function buildWorld() {
   spikes.push({ x: 3980, y: GROUND_Y + 8, w: 100, h: 20 });
   spikes.push({ x: 5520, y: GROUND_Y + 8, w: 110, h: 20 });
   spikes.push({ x: 6880, y: GROUND_Y + 8, w: 100, h: 20 });
+  // Buildings + doors
   buildings.push({ x: 300, y: GROUND_Y - 110, w: 120, h: 110, kind: "house", label: "EV" });
   doors.push({ x: 340, y: GROUND_Y - 56, w: 36, h: 56, id: "d1", label: "Ev", target: "interior", interiorId: "house1" });
   buildings.push({ x: 760, y: GROUND_Y - 120, w: 140, h: 120, kind: "bar", label: "BAR" });
@@ -380,6 +456,7 @@ function buildWorld() {
   buildings.push({ x: 4480, y: GROUND_Y - 120, w: 150, h: 120, kind: "bar", label: "MEYHANE" });
   doors.push({ x: 4530, y: GROUND_Y - 56, w: 40, h: 56, id: "d4", label: "Meyhane", target: "interior", interiorId: "bar2" });
   gates.push({ x: 6980, y: GROUND_Y - 120, w: 28, h: 120, open: false });
+  // Enemies
   addEnemy("slime", 520, GROUND_Y - 26, 70);
   addEnemy("thug", 1100, GROUND_Y - 50, 90);
   addEnemy("bat", 700, 200, 110);
@@ -471,6 +548,11 @@ function updateHud() {
   else zoneName.textContent = zoneLabel(zoneAt(player.x + player.w / 2));
   coinCount.textContent = String(inventory.coins);
   potionCount.textContent = String(inventory.potion);
+  poisonCount.textContent = String(inventory.poison);
+  flyCount.textContent = String(inventory.fly);
+  healSlot.classList.toggle("selected", selectedDrink === "heal");
+  poisonSlot.classList.toggle("selected", selectedDrink === "poison");
+  flySlot.classList.toggle("selected", selectedDrink === "fly");
   keySlot.classList.toggle("owned", inventory.key);
   medalSlot.classList.toggle("owned", inventory.medallion);
   const w = WEAPONS[weapon];
@@ -521,13 +603,58 @@ function attackBox(): Rect | null {
   };
 }
 function usePotion() {
-  if (inventory.potion <= 0 || player.hp >= player.maxHp || state !== "playing") return;
-  inventory.potion -= 1;
-  player.hp = Math.min(player.maxHp, player.hp + 280);
-  burst(player.x + player.w / 2, player.y + 10, "#7dffb3", 14);
-  sfxPickup();
+  if (state !== "playing") return;
+  // Prefer last selected drink; otherwise first available
+  const order: DrinkId[] = [selectedDrink, "heal", "poison", "fly"];
+  const pick = order.find((d) => {
+    if (d === "heal") return inventory.potion > 0;
+    if (d === "poison") return inventory.poison > 0;
+    return inventory.fly > 0;
+  });
+  if (!pick) {
+    showHint("İksir yok. Bara gir, şişe al.");
+    return;
+  }
+  if (pick === "heal") {
+    if (player.hp >= player.maxHp) {
+      showHint("Canın zaten dolu.");
+      return;
+    }
+    inventory.potion -= 1;
+    selectedDrink = "heal";
+    player.hp = Math.min(player.maxHp, player.hp + 280);
+    burst(player.x + player.w / 2, player.y + 10, "#7dffb3", 14);
+    sfxPickup();
+    updateHud();
+    showStory("Yeşil can iksiri içildi. (+280)");
+    return;
+  }
+  if (pick === "poison") {
+    inventory.poison -= 1;
+    selectedDrink = "poison";
+    poisonShots.push({
+      x: facing === 1 ? player.x + player.w : player.x - 14,
+      y: player.y + 18,
+      w: 14,
+      h: 10,
+      vx: facing * 420,
+      life: 1.4,
+      alive: true,
+    });
+    burst(player.x + player.w / 2, player.y + 20, "#ff3a3a", 8);
+    beep(140, 0.08, "sawtooth", 0.03);
+    updateHud();
+    showStory("Zehir fırlatıldı!");
+    return;
+  }
+  // fly
+  inventory.fly -= 1;
+  selectedDrink = "fly";
+  flyTimer = 5;
+  burst(player.x + player.w / 2, player.y + 10, "#4aa8ff", 16);
+  beep(520, 0.12, "sine", 0.04);
   updateHud();
-  showStory("İksir içildi. (+280 can)");
+  showStory("Mavi uçuş iksiri! 5 saniye uçuş.");
 }
 function solidList(): Rect[] {
   if (scene === "interior") return interiorPlatforms;
@@ -540,7 +667,19 @@ function solidAt(r: Rect): Rect | null {
   return null;
 }
 function resolvePlayer(dt: number) {
-  player.vy += GRAVITY * dt;
+  const flying = flyTimer > 0;
+  if (flying) {
+    flyTimer = Math.max(0, flyTimer - dt);
+    // light gravity + flap with jump buffer
+    player.vy += GRAVITY * 0.18 * dt;
+    if (jumpBuffered > 0) {
+      player.vy = -340;
+      jumpBuffered = 0;
+    }
+    player.vy = Math.max(-420, Math.min(360, player.vy));
+  } else {
+    player.vy += GRAVITY * dt;
+  }
   player.x += player.vx * dt;
   let hit = solidAt(player);
   if (hit) {
@@ -563,6 +702,11 @@ function resolvePlayer(dt: number) {
       player.y = hit.y + hit.h;
     }
     player.vy = 0;
+  }
+  // ceiling while flying
+  if (player.y < 24) {
+    player.y = 24;
+    if (player.vy < 0) player.vy = 0;
   }
   if (player.y > H + 80) hurtPlayer(9999, 0);
   if (scene === "world") {
@@ -678,8 +822,7 @@ function updateEnemies(dt: number) {
           addItem("coin", e.x + 6, e.y);
         }
       }
-    }
-  }
+    } }
 }
 function updateItems(dt: number) {
   const list = scene === "world" ? items : [];
@@ -696,7 +839,8 @@ function updateItems(dt: number) {
       showStory("Anahtar bulundu. Kule kapısı açılabilir.");
     } else if (it.kind === "potion") {
       inventory.potion += 1;
-      showStory("Can iksiri alındı. C ile kullan (+280).");
+      selectedDrink = "heal";
+      showStory("Can iksiri alındı. C / İksir ile iç (+280).");
     } else if (it.kind === "medallion") {
       inventory.medallion = true;
       state = "win";
@@ -715,6 +859,26 @@ function updateItems(dt: number) {
     ammo = WEAPONS[weapon].ammoMax;
     sfxPickup();
     showStory(`${WEAPONS[weapon].label} alındı!`);
+    updateHud();
+  }
+  for (const dp of drinkPickups) {
+    if (dp.taken) continue;
+    dp.bob += dt * 3;
+    const body = { x: dp.x, y: dp.y + Math.sin(dp.bob) * 3, w: dp.w, h: dp.h };
+    if (!aabb(player, body)) continue;
+    dp.taken = true;
+    selectedDrink = dp.drink;
+    sfxPickup();
+    if (dp.drink === "heal") {
+      inventory.potion += 1;
+      showStory(DRINKS.heal.hint);
+    } else if (dp.drink === "poison") {
+      inventory.poison += 1;
+      showStory(DRINKS.poison.hint);
+    } else {
+      inventory.fly += 1;
+      showStory(DRINKS.fly.hint);
+    }
     updateHud();
   }
   if (scene === "world") {
@@ -740,6 +904,7 @@ function tryEnterDoor() {
       player.vy = 0;
       currentInterior = null;
       weaponPickups.length = 0;
+      drinkPickups.length = 0;
       updateHud();
       showHint("Dışarı çıktın.");
     }
@@ -762,8 +927,11 @@ function tryEnterDoor() {
     updateHud();
     if (def.kind === "bar") {
       queueDialog([
-        { name: "BARMEN", text: "İçerisi kalabalık değil. Masaya bak. Belki şansın vardır." },
-        { name: "SEN", text: "Sadece geçiyorum." },
+        {
+          name: "BARMEN",
+          text: "Masada üç şişe: yeşil can, kırmızı zehir, mavi uçuş. İksir tuşuyla kullan.",
+        },
+        { name: "SEN", text: "Yeşili içerim. Kırmızıyı atarım. Maviyi… denerim." },
       ]);
     } else {
       showHint("Evin içi. Masa / pencere / varil — silah olabilir.");
@@ -779,6 +947,40 @@ function updateParticles(dt: number) {
     p.y += p.vy * dt;
     p.vy += 600 * dt;
     if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+function updatePoisonShots(dt: number) {
+  for (let i = poisonShots.length - 1; i >= 0; i--) {
+    const s = poisonShots[i]!;
+    if (!s.alive) {
+      poisonShots.splice(i, 1);
+      continue;
+    }
+    s.life -= dt;
+    s.x += s.vx * dt;
+    if (s.life <= 0) {
+      poisonShots.splice(i, 1);
+      continue;
+    }
+    if (scene === "world") {
+      for (const e of enemies) {
+        if (!e.alive || e.hurt > 0) continue;
+        if (!aabb(s, e)) continue;
+        e.hp -= rand(90, 140);
+        e.hurt = 0.25;
+        e.flash = 0.2;
+        e.vx += Math.sign(s.vx) * 120;
+        burst(e.x + e.w / 2, e.y + e.h / 2, "#ff3a3a", 12);
+        sfxHit();
+        s.alive = false;
+        if (e.hp <= 0) {
+          e.alive = false;
+          burst(e.x + e.w / 2, e.y + e.h / 2, "#ffd76a", 18);
+        }
+        break;
+      }
+    }
+    if (!s.alive) poisonShots.splice(i, 1);
   }
 }
 function tryAttack() {
@@ -824,7 +1026,7 @@ function handleInput(dt: number) {
   if (jump) jumpBuffered = 0.12;
   jumpBuffered = Math.max(0, jumpBuffered - dt);
   coyote = Math.max(0, coyote - dt);
-  if (jumpBuffered > 0 && (onGround || coyote > 0)) {
+  if (jumpBuffered > 0 && !flyTimer && (onGround || coyote > 0)) {
     player.vy = -JUMP;
     onGround = false;
     coyote = 0;
@@ -842,6 +1044,7 @@ function handleInput(dt: number) {
     tryEnterDoor();
   }
   if (!enter) interactLatch = false;
+  // near door hint
   if (scene === "world") {
     for (const d of doors) {
       if (aabb(player, { x: d.x - 12, y: d.y, w: d.w + 24, h: d.h })) {
@@ -909,6 +1112,7 @@ function drawBuildings() {
     ctx.lineTo(x + b.w + 8, b.y + 8);
     ctx.closePath();
     ctx.fill();
+    // windows
     ctx.fillStyle = "#c9e6ff";
     ctx.fillRect(x + 14, b.y + 28, 22, 22);
     ctx.fillRect(x + b.w - 36, b.y + 28, 22, 22);
@@ -921,14 +1125,19 @@ function drawBuildings() {
 }
 function drawInteriorDecor() {
   if (!currentInterior) return;
+  // back wall
   ctx.fillStyle = currentInterior.kind === "bar" ? "#2a1a22" : "#2a241c";
   ctx.fillRect(0, 80, W, GROUND_Y - 80);
+  // floor strip
   ctx.fillStyle = "#3a3028";
   ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+  // exit door
   ctx.fillStyle = "#1a120e";
   ctx.fillRect(40, GROUND_Y - 70, 40, 70);
   ctx.fillStyle = "#c9a227";
   ctx.fillRect(68, GROUND_Y - 40, 6, 6);
+  // furniture
+  // tables
   ctx.fillStyle = "#6a4a28";
   ctx.fillRect(220 - camX, 330, 120, 14);
   ctx.fillRect(240 - camX, 344, 12, 40);
@@ -936,10 +1145,12 @@ function drawInteriorDecor() {
   ctx.fillRect(520 - camX, 290, 140, 14);
   ctx.fillRect(540 - camX, 304, 12, 50);
   ctx.fillRect(630 - camX, 304, 12, 50);
+  // window
   ctx.fillStyle = "#7ab0d8";
   ctx.fillRect(800 - camX, 160, 70, 70);
   ctx.strokeStyle = "#1a1a1a";
   ctx.strokeRect(800 - camX, 160, 70, 70);
+  // barrels
   for (const bx of [400, 700]) {
     const x = bx - camX;
     ctx.fillStyle = "#6a4020";
@@ -987,6 +1198,12 @@ function drawPlayer() {
   const y = player.y;
   const blink = invuln > 0 && Math.floor(time * 20) % 2 === 0;
   if (blink) return;
+  if (flyTimer > 0) {
+    ctx.fillStyle = `rgba(74,168,255,${0.25 + Math.sin(time * 10) * 0.15})`;
+    ctx.beginPath();
+    ctx.ellipse(x + player.w / 2, y + player.h / 2, 28, 36, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.save();
   if (facing < 0) {
     ctx.translate(x + player.w / 2, 0);
@@ -997,6 +1214,7 @@ function drawPlayer() {
   ctx.beginPath();
   ctx.ellipse(x + 15, y + player.h + 2, 13, 4, 0, 0, Math.PI * 2);
   ctx.fill();
+  // boots / greaves — warrior
   ctx.fillStyle = "#2a2a32";
   ctx.fillRect(x + 5, y + 44, 9, 8);
   ctx.fillRect(x + 17, y + 44, 9, 8);
@@ -1007,14 +1225,17 @@ function drawPlayer() {
   ctx.fillStyle = "#3a4558";
   ctx.fillRect(x + 7, y + 30, 8, 15 + legSwing);
   ctx.fillRect(x + 16, y + 30, 8, 15 - legSwing);
+  // armor torso
   ctx.fillStyle = "#5a6578";
   ctx.fillRect(x + 5, y + 14, 20, 18);
   ctx.fillStyle = "#c9a227";
   ctx.fillRect(x + 5, y + 20, 20, 3);
   ctx.fillStyle = "#8a95a8";
   ctx.fillRect(x + 12, y + 14, 6, 18);
+  // cape
   ctx.fillStyle = "#8a2030";
   ctx.fillRect(x + 2, y + 16, 5, 22);
+  // head + helmet
   ctx.fillStyle = "#e8b896";
   ctx.fillRect(x + 8, y + 2, 14, 13);
   ctx.fillStyle = "#4a5568";
@@ -1025,6 +1246,7 @@ function drawPlayer() {
   ctx.fillStyle = "#1a1a22";
   ctx.fillRect(x + 10, y + 7, 3, 3);
   ctx.fillRect(x + 16, y + 7, 3, 3);
+  // weapon pose
   const swinging = attackT > 0;
   if (weapon === "rifle") {
     ctx.fillStyle = "#2a2a2a";
@@ -1102,6 +1324,7 @@ function drawEnemy(e: Enemy) {
     const sx = e.facing > 0 ? x + 24 : x - 14;
     ctx.fillRect(sx, y + 18, 18, 3);
   } else {
+    // bosses
     ctx.fillStyle = "#1a1010";
     ctx.fillRect(x + 10, y + e.h - 12, 16, 12);
     ctx.fillRect(x + e.w - 26, y + e.h - 12, 16, 12);
@@ -1161,6 +1384,7 @@ function drawWeaponPickup(wp: WeaponPickup) {
   const x = wp.x - camX;
   const y = wp.y + Math.sin(wp.bob) * 3;
   if (x < -40 || x > W + 40) return;
+  // placement hint
   if (wp.place === "barrel") {
     ctx.fillStyle = "#8a8a8a";
     ctx.fillRect(x + 8, y - 8, 4, 16);
@@ -1184,6 +1408,32 @@ function drawWeaponPickup(wp: WeaponPickup) {
     ctx.fillRect(x + 4, y + 6, 14, 4);
   }
 }
+function drawDrinkPickup(dp: DrinkPickup) {
+  if (dp.taken) return;
+  const x = dp.x - camX;
+  const y = dp.y + Math.sin(dp.bob) * 3;
+  if (x < -30 || x > W + 30) return;
+  const color = DRINKS[dp.drink].color;
+  ctx.fillStyle = color;
+  ctx.fillRect(x + 4, y + 6, 8, 12);
+  ctx.fillStyle = "#f0f4ff";
+  ctx.fillRect(x + 5, y + 1, 6, 5);
+  ctx.fillStyle = color;
+  ctx.font = "8px monospace";
+  ctx.fillText(dp.drink === "heal" ? "CAN" : dp.drink === "poison" ? "ZEHIR" : "UCUS", x - 2, y - 4);
+}
+function drawPoisonShots() {
+  for (const s of poisonShots) {
+    if (!s.alive) continue;
+    const x = s.x - camX;
+    ctx.fillStyle = "#ff3a3a";
+    ctx.beginPath();
+    ctx.arc(x + 7, s.y + 5, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ff9a9a";
+    ctx.fillRect(x + 4, s.y + 2, 6, 3);
+  }
+}
 function drawParticles() {
   for (const p of particles) {
     ctx.globalAlpha = Math.max(0, p.life * 2);
@@ -1204,6 +1454,8 @@ function resetGame() {
   inventory.coins = 0;
   inventory.key = false;
   inventory.potion = 0;
+  inventory.poison = 0;
+  inventory.fly = 0;
   inventory.medallion = false;
   weapon = "fist";
   ammo = 0;
@@ -1211,6 +1463,10 @@ function resetGame() {
   invuln = 0;
   attackT = 0;
   attackCd = 0;
+  flyTimer = 0;
+  selectedDrink = "heal";
+  poisonShots.length = 0;
+  drinkPickups.length = 0;
   camX = 0;
   scene = "world";
   currentInterior = null;
@@ -1235,6 +1491,7 @@ function frame(dt: number) {
       resolvePlayer(dt);
       updateEnemies(dt);
       updateItems(dt);
+      updatePoisonShots(dt);
     } else {
       handleInput(dt);
     }
@@ -1268,6 +1525,7 @@ function frame(dt: number) {
     drawInteriorDecor();
     drawPlatforms(interiorPlatforms);
     for (const wp of weaponPickups) drawWeaponPickup(wp);
+    for (const dp of drinkPickups) drawDrinkPickup(dp);
   } else {
     drawBuildings();
     drawPlatforms(platforms);
@@ -1276,6 +1534,7 @@ function frame(dt: number) {
     for (const it of items) drawWorldItem(it);
     for (const e of enemies) drawEnemy(e);
   }
+  drawPoisonShots();
   if (state !== "title") drawPlayer();
   drawParticles();
   ctx.restore();
