@@ -1,4 +1,3 @@
-
 import "./style.css";
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -383,7 +382,6 @@ const armorEnchant: Record<ArmorSlot, number> = {
   pants: 0,
   boots: 0,
 };
-
 let WORLD_W = 2480;
 let level = 1;
 let state: GameState = "title";
@@ -416,6 +414,14 @@ let venomDot = 0;
 let venomAcc = 0;
 let chest: Chest | null = null;
 let parchmentShown = false;
+let houseRocketShown = false;
+/** Bar sandığı seviye boyunca 1 kez — gir-çık ile yenilenmez */
+let barChestSave: {
+  type: ChestType;
+  opened: boolean;
+  isParchment: boolean;
+  parchmentShown: boolean;
+} | null = null;
 let enchantSparkleT = 0;
 let drinkAnimT = 0;
 let drinkAnimId: PotionId | null = null;
@@ -423,6 +429,15 @@ let pourAnimT = 0;
 let pourAnimX = 0;
 let pourAnimY = 0;
 let potionBusy = false;
+
+const CHEST_TITLE: Record<ChestType, string> = {
+  wood: "AHŞAP SANDIK",
+  thorny: "THORNY METAL",
+  sticky: "STICKY RAINBOW",
+  diamond: "ELMAS SANDIK",
+  obsidian: "OBSİDYEN",
+  none: "BOŞ KUTU",
+};
 
 const leftHand: { item: InvItem | null } = { item: null };
 const rightHand: { item: InvItem | null } = { item: null };
@@ -590,6 +605,15 @@ type LootResult =
   | { kind: "weapon"; id: CarryWeapon }
   | { kind: "potion"; id: PotionId }
   | { kind: "armor"; id: ArmorId };
+
+type LootReveal = {
+  t: number;
+  duration: number;
+  loot: LootResult;
+  label: string;
+  granted: boolean;
+};
+let lootReveal: LootReveal | null = null;
 
 function rollChestLoot(type: Exclude<ChestType, "none">): LootResult {
   const commonW: CarryWeapon[] = ["knife", "axe"];
@@ -938,23 +962,37 @@ function buildInteriorRoom(def: InteriorDef) {
   interiorPlatforms.length = 0;
   chest = null;
   parchmentShown = false;
+  houseRocketShown = false;
+  lootReveal = null;
   interiorPlatforms.push({ x: 0, y: GROUND_Y, w: INTERIOR_W, h: 24 });
-  // Climbable one-way staircase to upstairs chest
+  // Climbable one-way staircase to upstairs chest / poster
   interiorPlatforms.push({ x: 160, y: 368, w: 150, h: 18, oneWay: true });
   interiorPlatforms.push({ x: 380, y: 310, w: 160, h: 18, oneWay: true });
   interiorPlatforms.push({ x: 620, y: 250, w: 180, h: 18, oneWay: true });
 
   if (def.kind === "bar") {
-    const ctype = rollChestType();
+    if (!barChestSave) {
+      const ctype = rollChestType();
+      barChestSave = {
+        type: ctype,
+        opened: false,
+        isParchment: ctype === "none",
+        parchmentShown: false,
+      };
+    }
     chest = {
-      x: 700,
-      y: 210,
-      w: 40,
-      h: 32,
-      type: ctype,
-      opened: false,
-      isParchment: ctype === "none",
+      x: 690,
+      y: 198,
+      w: 56,
+      h: 44,
+      type: barChestSave.type,
+      opened: barChestSave.opened,
+      isParchment: barChestSave.isParchment,
     };
+    parchmentShown = barChestSave.parchmentShown;
+  } else {
+    // House has no loot chest — Rocket Raccoon poster upstairs
+    houseRocketShown = true;
   }
 }
 
@@ -970,38 +1008,41 @@ function buildWorld() {
   platTraps.length = 0;
   groundDrops.length = 0;
   chest = null;
+  barChestSave = null;
   levelClearPending = false;
 
-  WORLD_W = 2400 + level * 80;
-  const mid = Math.floor(WORLD_W * 0.42);
-  const houseX = level % 2 === 1 ? Math.floor(WORLD_W * 0.18) : null;
-  const barX = mid;
+  // Longer maps so boss is farther / run lasts more
+  WORLD_W = 4200 + level * 260;
+  const houseX = level % 2 === 1 ? Math.floor(WORLD_W * 0.12) : null;
+  const barX = Math.floor(WORLD_W * 0.32);
 
   buildInteriorsMeta(barX, houseX);
 
   // Ground: full collision
   addPlat(0, GROUND_Y, WORLD_W, 24, false);
 
-  // Climbable one-way staircase (steps ~58–62px, first reachable from ground)
+  // Climbable routes + mid/late platforms before the boss
   const airPlats: Plat[] = [
     { x: 200, y: 368, w: 120, h: 24, oneWay: true },
     { x: 380, y: 308, w: 110, h: 24, oneWay: true },
-    { x: Math.floor(WORLD_W * 0.28), y: 248, w: 130, h: 24, oneWay: true },
-    { x: Math.floor(WORLD_W * 0.48), y: 308, w: 120, h: 24, oneWay: true },
-    { x: Math.floor(WORLD_W * 0.58), y: 248, w: 110, h: 24, oneWay: true },
-    { x: Math.floor(WORLD_W * 0.68), y: 190, w: 120, h: 24, oneWay: true },
-    { x: Math.floor(WORLD_W * 0.8), y: 250, w: 130, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.18), y: 248, w: 130, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.28), y: 308, w: 120, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.4), y: 248, w: 120, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.5), y: 308, w: 130, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.58), y: 220, w: 110, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.68), y: 190, w: 130, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.78), y: 260, w: 120, h: 24, oneWay: true },
+    { x: Math.floor(WORLD_W * 0.86), y: 210, w: 130, h: 24, oneWay: true },
   ];
   for (const p of airPlats) {
     platforms.push(p);
-    // Spike traps on most floating platforms
-    if (chance(0.7) || airPlats.indexOf(p) % 2 === 0) addPlatTrap(p);
+    if (chance(0.65) || airPlats.indexOf(p) % 2 === 0) addPlatTrap(p);
   }
 
   // Keys on upper platforms
   addItem("key", airPlats[0]!.x + 20, airPlats[0]!.y - 28);
   if (level >= 4) {
-    addItem("key", airPlats[5]!.x + 30, airPlats[5]!.y - 28);
+    addItem("key", airPlats[7]!.x + 30, airPlats[7]!.y - 28);
   }
 
   if (houseX !== null) {
@@ -1046,21 +1087,23 @@ function buildWorld() {
     needsKey: true,
   });
 
-  const count = Math.min(8, 3 + level);
+  const count = Math.min(16, 6 + level * 2);
   const kinds: Array<Exclude<EnemyKind, "boss">> = ["goblin", "archer", "bat"];
   for (let i = 0; i < count; i++) {
     const t = (i + 1) / (count + 1);
-    const x = 280 + t * (WORLD_W - 720);
-    if (Math.abs(x - (barX + 70)) < 120) continue;
+    const x = 320 + t * (WORLD_W - 900);
+    if (Math.abs(x - (barX + 70)) < 140) continue;
+    if (Math.abs(x - (WORLD_W - 450)) < 180) continue;
     const kind = kinds[(i + level) % kinds.length]!;
-    if (kind === "bat") addEnemy("bat", x, 180 + (i % 3) * 30, 100);
-    else if (kind === "archer") addEnemy("archer", x, GROUND_Y - 48, 90);
-    else addEnemy("goblin", x, GROUND_Y - 44, 80);
+    if (kind === "bat") addEnemy("bat", x, 170 + (i % 4) * 28, 110);
+    else if (kind === "archer") addEnemy("archer", x, GROUND_Y - 48, 100);
+    else addEnemy("goblin", x, GROUND_Y - 44, 90);
   }
 
-  addBoss(WORLD_W - 400);
+  addBoss(WORLD_W - 480);
   addItem("coin", airPlats[1]!.x + 30, airPlats[1]!.y - 28);
-  addItem("coin", airPlats[3]!.x + 20, airPlats[3]!.y - 28);
+  addItem("coin", airPlats[4]!.x + 20, airPlats[4]!.y - 28);
+  addItem("coin", airPlats[8]!.x + 24, airPlats[8]!.y - 28);
 }
 
 function queueDialog(lines: DialogLine[]) {
@@ -1121,8 +1164,7 @@ function updateHud() {
   const pct = Math.max(0, (player.hp / player.maxHp) * 100);
   hpFill.style.width = `${pct}%`;
   hpText.textContent = String(Math.max(0, Math.ceil(player.hp)));
-
-  if (scene === "interior" && currentInterior) {
+    if (scene === "interior" && currentInterior) {
     zoneName.textContent = currentInterior.title;
   } else {
     const boss = nearBoss();
@@ -1488,7 +1530,7 @@ function onBottleLand(b: ThrownBottle) {
   beep(180, 0.08, "sawtooth", 0.03);
 
   if (b.id === "poison") {
-    // splash damage zone — hit nearby enemies
+        // splash damage zone — hit nearby enemies
     let hitAny = false;
     for (const e of enemies) {
       if (!e.alive) continue;
@@ -1888,7 +1930,7 @@ function triggerBossIntro(e: Enemy) {
     ],
     firefox: [
       { name: "FIREFOX", text: "Üç kuyruk. Bir nefes. Kül olursun." },
-    ],
+          ],
     minotaur: [
       { name: "MINOTAUR", text: "Boynuz hücumu. Zıpla… ya da kırıl." },
     ],
@@ -2254,7 +2296,7 @@ function updateBoss(e: Enemy, dt: number) {
         shake = 14;
         e.phase = 0;
         e.attackCd = 2.0;
-      }
+              }
     }
   } else {
     // cerberus
@@ -2596,7 +2638,7 @@ function updateEnemies(dt: number) {
           e.y + 18,
           dir * 340,
           -20,
-          35,
+          17,
           2.4,
           true,
           16,
@@ -2720,43 +2762,105 @@ function updateProjectiles(dt: number) {
   }
 }
 
+function lootLabel(loot: LootResult): string {
+  if (loot.kind === "weapon") return WEAPONS[loot.id].label;
+  if (loot.kind === "potion") return POTIONS[loot.id].label;
+  return ARMOR_LABEL[loot.id];
+}
+
+function startLootReveal(loot: LootResult) {
+  lootReveal = {
+    t: 0,
+    duration: 2.8,
+    loot,
+    label: lootLabel(loot),
+    granted: false,
+  };
+  beep(520, 0.08, "sine", 0.035);
+}
+
+function updateLootReveal(dt: number) {
+  if (!lootReveal) return;
+  lootReveal.t += dt;
+  const p = lootReveal.t / lootReveal.duration;
+  if (!lootReveal.granted && p >= 0.55) {
+    lootReveal.granted = true;
+    grantItem(lootReveal.loot);
+    burst(W / 2, H / 2, "#f5c518", 24);
+    beep(880, 0.12, "sine", 0.04);
+  }
+  if (lootReveal.t >= lootReveal.duration) {
+    if (!lootReveal.granted) grantItem(lootReveal.loot);
+    lootReveal = null;
+  }
+}
+
 function tryOpenChest() {
   if (!chest || chest.opened || scene !== "interior") return false;
-  if (!aabb(player, { x: chest.x - 24, y: chest.y - 16, w: chest.w + 48, h: chest.h + 32 }))
+  if (
+    !aabb(player, {
+      x: chest.x - 24,
+      y: chest.y - 16,
+      w: chest.w + 48,
+      h: chest.h + 32,
+    })
+  )
     return false;
+  if (lootReveal) return true;
 
   chest.opened = true;
+  if (barChestSave) {
+    barChestSave.opened = true;
+  }
   if (chest.isParchment || chest.type === "none") {
     parchmentShown = true;
+    if (barChestSave) barChestSave.parchmentShown = true;
     queueDialog([
       {
+        name: "ROCKET RACCOON",
+        text: "Sandık yok kardeşim. Sadece ben varım — ve orta parmağım.",
+      },
+      {
         name: "PARŞÖMEN",
-        text: "Üzerinde pikselli bir rakun… orta parmak çekiyor. Rocket?",
+        text: "Üstte yazıyor: ROCKET RACCOON. Alaycı rakun posterı.",
       },
     ]);
-    showStory("Sandık yok — sadece alaycı bir parşömen.");
+    showStory("Boş kutu — Rocket Raccoon parşömeni.");
     beep(180, 0.2, "sawtooth", 0.03);
     return true;
   }
 
   const loot = rollChestLoot(chest.type);
-  const labels: Record<ChestType, string> = {
-    wood: "Ahşap",
-    thorny: "Dikenli",
-    sticky: "Yapışkan",
-    diamond: "Elmas",
-    obsidian: "Obsidyen",
-    none: "Boş",
-  };
-  showHint(`${labels[chest.type]} sandık açıldı`);
-  grantItem(loot);
-  burst(chest.x + 20, chest.y, "#f5c518", 16);
+  showHint(`${CHEST_TITLE[chest.type]} açıldı!`);
+  burst(chest.x + chest.w / 2, chest.y, "#f5c518", 18);
+  startLootReveal(loot);
+  return true;
+}
+
+function tryHouseRocket() {
+  if (scene !== "interior" || !currentInterior || currentInterior.kind !== "house")
+    return false;
+  if (!houseRocketShown) return false;
+  const poster = { x: 680, y: 150, w: 110, h: 120 };
+  if (!aabb(player, { x: poster.x - 20, y: poster.y - 10, w: poster.w + 40, h: poster.h + 40 }))
+    return false;
+  queueDialog([
+    {
+      name: "ROCKET RACCOON",
+      text: "Ben Rocket Raccoon. Orta parmak. Anlaşıldı mı?",
+    },
+    {
+      name: "DUVAR YAZISI",
+      text: "Bu evde sandık yok. Loot için BAR’a git — anahtarla.",
+    },
+  ]);
   return true;
 }
 
 function tryEnterDoor() {
   if (scene === "interior") {
     if (tryOpenChest()) return;
+    if (tryHouseRocket()) return;
     if (currentInterior && player.x < 140) {
       sfxDoor();
       scene = "world";
@@ -2811,7 +2915,13 @@ function tryEnterDoor() {
         },
       ]);
     } else {
-      showHint("Eski ev. Dinlen, sonra dışarı.");
+      queueDialog([
+        {
+          name: "???",
+          text: "Bu evde sandık yok. Üst kattaki postere bak — ROCKET RACCOON.",
+        },
+      ]);
+      showHint("Üst kata tırman · postere E");
     }
     return;
   }
@@ -2903,6 +3013,17 @@ function tryAttack() {
 }
 
 function handleInput(dt: number) {
+  if (lootReveal) {
+    const skip =
+      keys.has("x") ||
+      keys.has("X") ||
+      keys.has("Enter") ||
+      keys.has(" ") ||
+      keys.has("e") ||
+      keys.has("E");
+    if (skip) lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
+    return;
+  }
   if (state === "dialog") {
     const adv =
       keys.has("x") || keys.has("X") || keys.has("Enter") || keys.has(" ");
@@ -2939,7 +3060,6 @@ function handleInput(dt: number) {
   if (right) ax += 1;
   if (ax !== 0) facing = ax > 0 ? 1 : -1;
   player.vx = ax * MOVE * moveMul;
-
   if (jump) jumpBuffered = 0.12;
   jumpBuffered = Math.max(0, jumpBuffered - dt);
   coyote = Math.max(0, coyote - dt);
@@ -3008,11 +3128,17 @@ function handleInput(dt: number) {
       })
     ) {
       showHint("↑ / E — sandığı aç");
+    } else if (
+      houseRocketShown &&
+      aabb(player, { x: 660, y: 140, w: 150, h: 140 })
+    ) {
+      showHint("↑ / E — ROCKET RACCOON");
     } else if (player.x < 150) {
       showHint("↑ / E — dışarı çık");
     }
   }
 }
+
 function drawSky() {
   const t = (level - 1) / (MAX_LEVEL - 1);
   const top =
@@ -3079,28 +3205,306 @@ function drawBuildings() {
   }
 }
 
-function drawRocketParchment(px: number, py: number) {
-  ctx.fillStyle = "#e8d8a8";
-  ctx.fillRect(px, py, 48, 56);
-  ctx.strokeStyle = "#8a7040";
-  ctx.strokeRect(px, py, 48, 56);
+function drawRocketRaccoon(px: number, py: number, big = false) {
+  const s = big ? 1.7 : 1;
+  const w = 48 * s;
+  const h = 56 * s;
+  // parchment / poster board
+  ctx.fillStyle = big ? "#3a2a18" : "#e8d8a8";
+  ctx.fillRect(px, py, w, h);
+  ctx.strokeStyle = big ? "#c9a227" : "#8a7040";
+  ctx.lineWidth = big ? 3 : 1;
+  ctx.strokeRect(px, py, w, h);
+  // title banner
+  ctx.fillStyle = "#8a2030";
+  ctx.fillRect(px + 2, py + 2, w - 4, 10 * s);
+  ctx.fillStyle = "#f5c518";
+  ctx.font = `${Math.max(7, 8 * s)}px monospace`;
+  ctx.fillText("ROCKET", px + 6 * s, py + 9 * s);
   // raccoon body
   ctx.fillStyle = "#6a5a48";
-  ctx.fillRect(px + 14, py + 22, 20, 18);
+  ctx.fillRect(px + 14 * s, py + 24 * s, 20 * s, 18 * s);
   ctx.fillStyle = "#c8b090";
-  ctx.fillRect(px + 16, py + 10, 16, 14);
+  ctx.fillRect(px + 16 * s, py + 12 * s, 16 * s, 14 * s);
+  // mask
   ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(px + 14, py + 14, 20, 6);
+  ctx.fillRect(px + 14 * s, py + 16 * s, 20 * s, 6 * s);
   ctx.fillStyle = "#fff";
-  ctx.fillRect(px + 18, py + 15, 3, 3);
-  ctx.fillRect(px + 27, py + 15, 3, 3);
-  // middle finger
+  ctx.fillRect(px + 18 * s, py + 17 * s, 3 * s, 3 * s);
+  ctx.fillRect(px + 27 * s, py + 17 * s, 3 * s, 3 * s);
+  // ears
+  ctx.fillStyle = "#6a5a48";
+  ctx.fillRect(px + 15 * s, py + 10 * s, 5 * s, 4 * s);
+  ctx.fillRect(px + 28 * s, py + 10 * s, 5 * s, 4 * s);
+  // middle finger (clear)
   ctx.fillStyle = "#c8b090";
-  ctx.fillRect(px + 34, py + 28, 5, 14);
-  ctx.fillRect(px + 32, py + 38, 9, 4);
-  ctx.fillStyle = "#8a2030";
-  ctx.font = "7px monospace";
-  ctx.fillText("!", px + 38, py + 26);
+  ctx.fillRect(px + 34 * s, py + 28 * s, 5 * s, 16 * s);
+  ctx.fillRect(px + 32 * s, py + 40 * s, 9 * s, 4 * s);
+  ctx.fillRect(px + 30 * s, py + 42 * s, 4 * s, 3 * s);
+  ctx.fillRect(px + 39 * s, py + 42 * s, 4 * s, 3 * s);
+  ctx.fillStyle = "#ff6060";
+  ctx.font = `${Math.max(8, 9 * s)}px monospace`;
+  ctx.fillText("!", px + 36 * s, py + 27 * s);
+  if (big) {
+    ctx.fillStyle = "#f4f0e6";
+    ctx.font = "10px monospace";
+    ctx.fillText("ROCKET RACCOON", px - 8, py + h + 14);
+    ctx.fillStyle = "#9ad1ff";
+    ctx.font = "9px monospace";
+    ctx.fillText("E — bak", px + 18, py + h + 28);
+  }
+}
+
+function drawChestVisual(cx: number, cy: number, type: ChestType, opened: boolean) {
+  const w = 56;
+  const h = 44;
+  if (opened && type !== "none") {
+    // open empty chest shell
+    ctx.fillStyle = "#3a2a1a";
+    ctx.fillRect(cx, cy + 16, w, h - 16);
+    ctx.fillStyle = "#5a4030";
+    ctx.fillRect(cx - 2, cy + 4, w + 4, 14);
+    ctx.strokeStyle = "#1a1010";
+    ctx.strokeRect(cx, cy + 16, w, h - 16);
+    return;
+  }
+
+  if (type === "wood" || type === "none") {
+    // wooden planks
+    ctx.fillStyle = "#6b4226";
+    ctx.fillRect(cx, cy, w, h);
+    ctx.fillStyle = "#8a5a32";
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(cx + 3, cy + 6 + i * 9, w - 6, 6);
+    }
+    ctx.fillStyle = "#4a2e18";
+    ctx.fillRect(cx + 2, cy + 2, w - 4, 4);
+    ctx.fillRect(cx + 2, cy + h - 6, w - 4, 4);
+    // iron bands
+    ctx.fillStyle = "#3a3a40";
+    ctx.fillRect(cx, cy + 14, w, 5);
+    ctx.fillRect(cx, cy + 30, w, 5);
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(cx + w / 2 - 4, cy + 18, 8, 8);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath();
+    ctx.arc(cx + w / 2, cy + 22, 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (type === "thorny") {
+    // metal body
+    const g = ctx.createLinearGradient(cx, cy, cx, cy + h);
+    g.addColorStop(0, "#8a9098");
+    g.addColorStop(0.5, "#5a6068");
+    g.addColorStop(1, "#3a4048");
+    ctx.fillStyle = g;
+    ctx.fillRect(cx, cy, w, h);
+    ctx.fillStyle = "#b0b8c0";
+    ctx.fillRect(cx + 3, cy + 3, w - 6, 8);
+    ctx.fillStyle = "#2a3038";
+    ctx.fillRect(cx + 4, cy + 18, w - 8, 4);
+    // metal rivets
+    ctx.fillStyle = "#d0d4d8";
+    for (const rx of [8, 20, 32, 44]) {
+      ctx.fillRect(cx + rx, cy + 6, 3, 3);
+      ctx.fillRect(cx + rx, cy + 34, 3, 3);
+    }
+    // thorns / spikes
+    ctx.fillStyle = "#c8d0d8";
+    for (let i = 0; i < 6; i++) {
+      const sx = cx + 6 + i * 8;
+      ctx.beginPath();
+      ctx.moveTo(sx, cy);
+      ctx.lineTo(sx + 3, cy - 10);
+      ctx.lineTo(sx + 6, cy);
+      ctx.fill();
+    }
+    for (let i = 0; i < 3; i++) {
+      const sy = cy + 12 + i * 10;
+      ctx.beginPath();
+      ctx.moveTo(cx, sy);
+      ctx.lineTo(cx - 8, sy + 3);
+      ctx.lineTo(cx, sy + 6);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx + w, sy);
+      ctx.lineTo(cx + w + 8, sy + 3);
+      ctx.lineTo(cx + w, sy + 6);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#e04040";
+    ctx.fillRect(cx + w / 2 - 5, cy + 20, 10, 10);
+  } else if (type === "sticky") {
+    // melted rainbow goo chest
+    const cols = ["#ff4d6d", "#ff9f1c", "#ffd60a", "#2ec4b6", "#7b2cbf", "#ff7ad9"];
+    for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = cols[i]!;
+      const drip = Math.sin(time * 3 + i) * 3;
+      ctx.beginPath();
+      ctx.moveTo(cx + i * 9, cy + 4);
+      ctx.lineTo(cx + i * 9 + 12, cy + 4);
+      ctx.lineTo(cx + i * 9 + 10, cy + h + 6 + drip);
+      ctx.lineTo(cx + i * 9 - 2, cy + h + 2 + drip);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(cx + 8, cy + 8, w - 16, 10);
+    // goo blobs
+    ctx.fillStyle = "#ff7ad9";
+    ctx.beginPath();
+    ctx.arc(cx + 12, cy + h + 4, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#2ec4b6";
+    ctx.beginPath();
+    ctx.arc(cx + w - 10, cy + h + 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(cx + w / 2 - 4, cy + 20, 8, 8);
+  } else if (type === "diamond") {
+    // bright crystalline
+    const g = ctx.createLinearGradient(cx, cy, cx + w, cy + h);
+    g.addColorStop(0, "#e8f7ff");
+    g.addColorStop(0.4, "#7ad0f0");
+    g.addColorStop(1, "#3a90c0");
+    ctx.fillStyle = g;
+    ctx.fillRect(cx, cy, w, h);
+    // diamond facets
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath();
+    ctx.moveTo(cx + w / 2, cy - 6);
+    ctx.lineTo(cx + w / 2 + 12, cy + 10);
+    ctx.lineTo(cx + w / 2, cy + 18);
+    ctx.lineTo(cx + w / 2 - 12, cy + 10);
+    ctx.fill();
+    ctx.fillStyle = "rgba(180,230,255,0.8)";
+    for (const dx of [8, 28, 44]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + dx, cy + 22);
+      ctx.lineTo(cx + dx + 6, cy + 30);
+      ctx.lineTo(cx + dx, cy + 38);
+      ctx.lineTo(cx + dx - 6, cy + 30);
+      ctx.fill();
+    }
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx + 2, cy + 2, w - 4, h - 4);
+    // sparkle
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(time * 10) * 0.4})`;
+    ctx.fillRect(cx + 10, cy + 8, 3, 3);
+    ctx.fillRect(cx + 40, cy + 14, 2, 2);
+    ctx.fillRect(cx + 22, cy + 34, 3, 3);
+  } else {
+    // obsidian — purple-black stone
+    ctx.fillStyle = "#120818";
+    ctx.fillRect(cx, cy, w, h);
+    ctx.fillStyle = "#2a1038";
+    ctx.fillRect(cx + 3, cy + 3, w - 6, h - 6);
+    // crystalline veins
+    ctx.strokeStyle = "#7a3aaa";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + 8, cy + 8);
+    ctx.lineTo(cx + 22, cy + 20);
+    ctx.lineTo(cx + 14, cy + 34);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + w - 8, cy + 10);
+    ctx.lineTo(cx + w - 20, cy + 24);
+    ctx.lineTo(cx + w - 12, cy + 36);
+    ctx.stroke();
+    ctx.fillStyle = "#b44dff";
+    ctx.fillRect(cx + 18, cy + 16, 4, 4);
+    ctx.fillRect(cx + 34, cy + 26, 3, 3);
+    ctx.fillStyle = `rgba(180,77,255,${0.35 + Math.sin(time * 6) * 0.25})`;
+    ctx.fillRect(cx + 6, cy + 6, w - 12, 6);
+    ctx.fillStyle = "#1a0a20";
+    ctx.fillRect(cx + w / 2 - 5, cy + 22, 10, 10);
+    ctx.fillStyle = "#d0a0ff";
+    ctx.fillRect(cx + w / 2 - 2, cy + 25, 4, 4);
+  }
+
+  // name plate above chest
+  const title = CHEST_TITLE[type];
+  ctx.font = "9px monospace";
+  const tw = ctx.measureText(title).width;
+  ctx.fillStyle = "rgba(8,10,18,0.85)";
+  ctx.fillRect(cx + w / 2 - tw / 2 - 4, cy - 18, tw + 8, 14);
+  ctx.fillStyle = "#f5c518";
+  ctx.fillText(title, cx + w / 2 - tw / 2, cy - 7);
+}
+
+function drawLootReveal() {
+  if (!lootReveal) return;
+  const p = Math.min(1, lootReveal.t / lootReveal.duration);
+  ctx.fillStyle = `rgba(5,8,14,${0.55 + Math.min(0.3, p * 0.4)})`;
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2;
+  const cy = H / 2 - 10;
+  // spinning rays
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(lootReveal.t * 4);
+  for (let i = 0; i < 12; i++) {
+    ctx.rotate(Math.PI / 6);
+    ctx.fillStyle = `rgba(245,197,24,${0.08 + (i % 2) * 0.06})`;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-18, -160);
+    ctx.lineTo(18, -160);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // spinning card / orb
+  const spin = lootReveal.t * 10;
+  const scale = p < 0.2 ? p / 0.2 : p > 0.85 ? 1 + (p - 0.85) * 0.4 : 1;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(spin);
+  ctx.scale(scale, scale * Math.max(0.15, Math.abs(Math.cos(spin * 0.5))));
+  ctx.fillStyle = "#1a2740";
+  ctx.fillRect(-40, -50, 80, 100);
+  ctx.strokeStyle = "#f5c518";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(-40, -50, 80, 100);
+
+  // show item once past reveal threshold
+  if (p >= 0.35) {
+    ctx.rotate(-spin);
+    const loot = lootReveal.loot;
+    if (loot.kind === "weapon") {
+      ctx.fillStyle = "#c0d0e0";
+      ctx.fillRect(-6, -28, 12, 50);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(-12, 16, 24, 8);
+    } else if (loot.kind === "potion") {
+      ctx.fillStyle = POTIONS[loot.id].color;
+      ctx.fillRect(-10, -10, 20, 28);
+      ctx.fillStyle = "#f0f4ff";
+      ctx.fillRect(-8, -16, 16, 8);
+    } else {
+      ctx.fillStyle = "#708090";
+      ctx.fillRect(-16, -20, 32, 36);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(-12, -4, 24, 6);
+    }
+  } else {
+    ctx.fillStyle = "#3d5a80";
+    ctx.font = "28px monospace";
+    ctx.fillText("?", -10, 10);
+  }
+  ctx.restore();
+
+  if (p >= 0.45) {
+    ctx.fillStyle = "#f5c518";
+    ctx.font = "16px monospace";
+    const label = lootReveal.label;
+    const tw = ctx.measureText(label).width;
+    ctx.fillText(label, cx - tw / 2, cy + 90);
+    ctx.fillStyle = "#9ad1ff";
+    ctx.font = "11px monospace";
+    ctx.fillText("Eşya kazanıldı!", cx - 50, cy + 112);
+  }
 }
 
 function drawInteriorDecor() {
@@ -3133,7 +3537,6 @@ function drawInteriorDecor() {
     ctx.font = "10px monospace";
     ctx.fillText("BARMEN", 450, GROUND_Y - 90);
 
-    // tables with beer mugs (no loot)
     for (const tx of [160, 520]) {
       ctx.fillStyle = "#6a4a28";
       ctx.fillRect(tx, GROUND_Y - 36, 70, 12);
@@ -3147,7 +3550,6 @@ function drawInteriorDecor() {
       ctx.fillRect(tx + 42, GROUND_Y - 44, 6, 6);
     }
 
-    // barbarian NPCs
     for (const bx of [200, 600]) {
       ctx.fillStyle = "#4a3028";
       ctx.fillRect(bx, GROUND_Y - 50, 22, 28);
@@ -3165,44 +3567,28 @@ function drawInteriorDecor() {
     ctx.font = "12px monospace";
     ctx.fillText("KÖR FARE", 375, 174);
 
-    // upstairs chest / parchment
     if (chest) {
       const cx = chest.x - camX;
       const cy = chest.y;
       if (chest.opened && parchmentShown) {
-        drawRocketParchment(cx - 4, cy - 20);
-      } else if (!chest.opened) {
-        const colors: Record<ChestType, string> = {
-          wood: "#8a6030",
-          thorny: "#4a6830",
-          sticky: "#6a5080",
-          diamond: "#70c8e8",
-          obsidian: "#2a2038",
-          none: "#8a6030",
-        };
-        ctx.fillStyle = colors[chest.type];
-        ctx.fillRect(cx, cy, chest.w, chest.h);
-        ctx.fillStyle = "#c9a227";
-        ctx.fillRect(cx + 4, cy + 12, chest.w - 8, 4);
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillRect(cx + chest.w / 2 - 3, cy + 10, 6, 8);
-        ctx.fillStyle = "#f5c518";
-        ctx.font = "8px monospace";
-        ctx.fillText("SANDIK", cx - 4, cy - 6);
+        drawRocketRaccoon(cx - 4, cy - 24, false);
       } else {
-        ctx.fillStyle = "#5a4030";
-        ctx.fillRect(cx, cy + 10, chest.w, chest.h - 10);
-        ctx.fillStyle = "#8a6840";
-        ctx.fillRect(cx - 2, cy, chest.w + 4, 12);
+        drawChestVisual(cx, cy, chest.type, chest.opened);
       }
     }
   } else {
+    // house furniture
     ctx.fillStyle = "#6a4a28";
     ctx.fillRect(220, 330, 120, 14);
     ctx.fillStyle = "#7ab0d8";
-    ctx.fillRect(700, 160, 70, 70);
+    ctx.fillRect(160, 160, 70, 70);
+    // Rocket Raccoon wall poster upstairs (no chest)
+    if (houseRocketShown) {
+      drawRocketRaccoon(700, 155, true);
+    }
   }
 }
+
 function drawHandPotion(x: number, y: number) {
   // drinking animation: raise bottle to mouth
   if (drinkAnimT > 0 && drinkAnimId) {
@@ -3415,6 +3801,12 @@ function drawEnemy(e: Enemy) {
     ctx.fillRect(x + 18, y + 7, 3, 3);
   } else {
     const bk = e.bossKind ?? "ironface";
+    // ground contact shadow
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath();
+    ctx.ellipse(x + e.w / 2, y + e.h + 2, e.w * 0.42, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
     const bodyColor: Record<BossKind, string> = {
       ironface: "#3a4058",
       cloud: "#6a90b8",
@@ -3433,7 +3825,7 @@ function drawEnemy(e: Enemy) {
       ctx.beginPath();
       ctx.ellipse(
         x + e.w * 0.55,
-        y + e.h * 0.55,
+                y + e.h * 0.55,
         e.w * 0.48,
         e.h * 0.42,
         0,
@@ -3441,9 +3833,15 @@ function drawEnemy(e: Enemy) {
         Math.PI * 2,
       );
       ctx.fill();
+      ctx.fillStyle = "#1a4a22";
+      ctx.beginPath();
+      ctx.ellipse(x + e.w * 0.35, y + e.h * 0.5, e.w * 0.22, e.h * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = "#ff3030";
       ctx.fillRect(x + 8, y + 14, 5, 5);
       ctx.fillRect(x + 18, y + 14, 5, 5);
+      ctx.fillStyle = "#f0e080";
+      ctx.fillRect(x + 4, y + 22, 10, 3);
     } else if (bk === "mothman") {
       const flap = Math.sin(time * 10) * 10;
       ctx.fillStyle = "#6a5080";
@@ -3461,6 +3859,9 @@ function drawEnemy(e: Enemy) {
       ctx.fillRect(x + 18, y + 20, e.w - 36, e.h - 28);
       ctx.fillStyle = "#c09070";
       ctx.fillRect(x + 22, y + 4, e.w - 44, 20);
+      ctx.fillStyle = "#1a1018";
+      ctx.fillRect(x + 26, y + 10, 5, 5);
+      ctx.fillRect(x + e.w - 36, y + 10, 5, 5);
     } else if (bk === "firefox") {
       ctx.fillStyle = bodyColor.firefox;
       ctx.fillRect(x + 10, y + 20, e.w - 20, e.h - 28);
@@ -3477,16 +3878,23 @@ function drawEnemy(e: Enemy) {
       ctx.fillStyle = "#ff3030";
       ctx.fillRect(x + 22, y + 10, 5, 5);
       ctx.fillRect(x + e.w - 36, y + 10, 5, 5);
+      // snout
+      ctx.fillStyle = "#ff9050";
+      ctx.fillRect(x + e.w / 2 - 6, y + 18, 12, 8);
     } else if (bk === "kingkong") {
       ctx.fillStyle = bodyColor.kingkong;
       ctx.fillRect(x + 8, y + 28, e.w - 16, e.h - 40);
       ctx.fillRect(x + 4, y + 40, 16, 28);
       ctx.fillRect(x + e.w - 20, y + 40, 16, 28);
+      ctx.fillStyle = "#3a2418";
+      ctx.fillRect(x + 14, y + 36, e.w - 28, 16);
       ctx.fillStyle = "#8a6a50";
       ctx.fillRect(x + 20, y + 4, e.w - 40, 28);
       ctx.fillStyle = "#1a1010";
       ctx.fillRect(x + 28, y + 14, 6, 6);
       ctx.fillRect(x + e.w - 34, y + 14, 6, 6);
+      ctx.fillStyle = "#c09070";
+      ctx.fillRect(x + e.w / 2 - 8, y + 22, 16, 6);
     } else if (bk === "creeper") {
       const flap = Math.sin(time * 14) * 8;
       ctx.fillStyle = "#3a5030";
@@ -3505,6 +3913,8 @@ function drawEnemy(e: Enemy) {
       ctx.fillStyle = "#80ff60";
       ctx.fillRect(x + 22, y + 24, 5, 5);
       ctx.fillRect(x + e.w - 27, y + 24, 5, 5);
+      ctx.fillStyle = "#4a6840";
+      ctx.fillRect(x + 20, y + 36, e.w - 40, 8);
     } else if (bk === "sphinx") {
       ctx.fillStyle = bodyColor.sphinx;
       ctx.fillRect(x + 10, y + 30, e.w - 20, e.h - 40);
@@ -3515,11 +3925,19 @@ function drawEnemy(e: Enemy) {
       ctx.lineTo(x + e.w + 20, y + 50);
       ctx.lineTo(x + e.w - 10, y + 70);
       ctx.fill();
+      // headdress stripes
+      ctx.fillStyle = "#4a2030";
+      ctx.fillRect(x + 18, y + 6, e.w - 48, 6);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(x + 18, y + 12, e.w - 48, 4);
       ctx.fillStyle = "#1a1010";
       ctx.fillRect(x + 28, y + 16, 5, 5);
     } else if (bk === "cerberus") {
       ctx.fillStyle = bodyColor.cerberus;
       ctx.fillRect(x + 16, y + 36, e.w - 32, e.h - 44);
+      // muscular torso detail
+      ctx.fillStyle = "#2a1014";
+      ctx.fillRect(x + 28, y + 44, e.w - 56, 20);
       const heads = [0.18, 0.5, 0.82];
       for (let i = 0; i < 3; i++) {
         const hx = x + e.w * heads[i]! - 14;
@@ -3530,8 +3948,9 @@ function drawEnemy(e: Enemy) {
           ctx.fillStyle = "#ff4040";
           ctx.fillRect(hx + 6, y + 16, 5, 5);
           ctx.fillRect(hx + 16, y + 16, 5, 5);
+          ctx.fillStyle = "#f0c0a0";
+          ctx.fillRect(hx + 10, y + 26, 8, 5);
         }
-        // per-head HP bar
         if (e.headHp) {
           ctx.fillStyle = "#1a1010";
           ctx.fillRect(hx, y - 8 - i * 2, 28, 4);
@@ -3542,6 +3961,8 @@ function drawEnemy(e: Enemy) {
     } else if (bk === "minotaur") {
       ctx.fillStyle = bodyColor.minotaur;
       ctx.fillRect(x + 10, y + 28, e.w - 20, e.h - 36);
+      ctx.fillStyle = "#4a3820";
+      ctx.fillRect(x + 16, y + 40, e.w - 32, 18);
       ctx.fillStyle = "#c09070";
       ctx.fillRect(x + 18, y + 6, e.w - 36, 26);
       ctx.fillStyle = "#e8e0d0";
@@ -3555,6 +3976,9 @@ function drawEnemy(e: Enemy) {
       ctx.lineTo(x + e.w + 6, y - 10);
       ctx.lineTo(x + e.w - 16, y + 8);
       ctx.fill();
+      ctx.fillStyle = "#1a1010";
+      ctx.fillRect(x + 24, y + 14, 5, 5);
+      ctx.fillRect(x + e.w - 34, y + 14, 5, 5);
     } else if (bk === "cloud") {
       ctx.fillStyle = "#a8c8e8";
       ctx.beginPath();
@@ -3562,23 +3986,36 @@ function drawEnemy(e: Enemy) {
       ctx.arc(x + e.w / 2, y + 10, 18, 0, Math.PI * 2);
       ctx.arc(x + e.w - 18, y + 16, 14, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = "#d8e8f8";
+      ctx.beginPath();
+      ctx.arc(x + e.w / 2 - 8, y + 8, 8, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = bodyColor.cloud;
       ctx.fillRect(x + 14, y + 28, e.w - 28, e.h - 36);
+      ctx.fillStyle = "#1a3048";
+      ctx.fillRect(x + 22, y + 36, 6, 6);
+      ctx.fillRect(x + e.w - 30, y + 36, 6, 6);
     } else {
+      // ironface — armored giant
       ctx.fillStyle = "#1a1010";
       ctx.fillRect(x + 10, y + e.h - 12, 16, 12);
       ctx.fillRect(x + e.w - 26, y + e.h - 12, 16, 12);
       ctx.fillStyle = bodyColor[bk];
       ctx.fillRect(x + 6, y + 24, e.w - 12, e.h - 36);
+      // armor plates
+      ctx.fillStyle = "#6a7080";
+      ctx.fillRect(x + 10, y + 28, e.w - 20, 12);
+      ctx.fillRect(x + 12, y + 44, e.w - 24, 10);
       ctx.fillStyle = "#c09070";
       ctx.fillRect(x + 14, y + 2, e.w - 28, 26);
-      if (bk === "ironface") {
-        ctx.fillStyle = "#8a9098";
-        ctx.fillRect(x + 16, y + 8, e.w - 32, 14);
-      }
+      ctx.fillStyle = "#8a9098";
+      ctx.fillRect(x + 16, y + 8, e.w - 32, 14);
+      ctx.fillStyle = "#2a3038";
+      ctx.fillRect(x + 20, y + 12, 8, 6);
+      ctx.fillRect(x + e.w - 28, y + 12, 8, 6);
       ctx.fillStyle = "#ff3030";
-      ctx.fillRect(x + 20, y + 12, 6, 6);
-      ctx.fillRect(x + e.w - 26, y + 12, 6, 6);
+      ctx.fillRect(x + 22, y + 13, 4, 4);
+      ctx.fillRect(x + e.w - 26, y + 13, 4, 4);
     }
 
     if (e.telegraph > 0) {
@@ -3897,6 +4334,9 @@ function resetGame() {
   drinkAnimId = null;
   pourAnimT = 0;
   potionBusy = false;
+  lootReveal = null;
+  houseRocketShown = false;
+  barChestSave = null;
   projectiles.length = 0;
   hazards.length = 0;
   platTraps.length = 0;
@@ -3928,7 +4368,15 @@ function frame(dt: number) {
   time += dt;
   if (shake > 0) shake = Math.max(0, shake - dt * 30);
 
-  if (state === "playing" || state === "dialog") {
+  if (lootReveal) {
+    updateLootReveal(dt);
+    handleInput(dt);
+    updateParticles(dt);
+    if (scene === "world") {
+      camX = player.x + player.w / 2 - W * 0.35;
+      camX = Math.max(0, Math.min(camX, WORLD_W - W));
+    } else camX = 0;
+  } else if (state === "playing" || state === "dialog") {
     if (state === "playing") {
       handleInput(dt);
       resolvePlayer(dt);
@@ -3996,6 +4444,7 @@ function frame(dt: number) {
   if (state !== "title") drawPlayer();
   drawParticles();
   ctx.restore();
+  drawLootReveal();
 }
 
 let last = performance.now();
@@ -4056,8 +4505,13 @@ document
 
 function bindHold(sel: string, key: string) {
   const el = document.querySelector<HTMLElement>(sel)!;
-  const on = (ev: Event) => {
+  const on = (ev: PointerEvent) => {
     ev.preventDefault();
+    try {
+      el.setPointerCapture(ev.pointerId);
+    } catch {
+      /* ignore */
+    }
     keys.add(key);
   };
   const off = (ev: Event) => {
@@ -4066,8 +4520,8 @@ function bindHold(sel: string, key: string) {
   };
   el.addEventListener("pointerdown", on);
   el.addEventListener("pointerup", off);
-  el.addEventListener("pointerleave", off);
   el.addEventListener("pointercancel", off);
+  el.addEventListener("lostpointercapture", off);
 }
 bindHold("#btn-left", "ArrowLeft");
 bindHold("#btn-right", "ArrowRight");
@@ -4080,6 +4534,29 @@ bindHold("#btn-bag3", "3");
 document.querySelector("#btn-potion")!.addEventListener("click", (e) => {
   e.preventDefault();
   usePotion();
+});
+document.querySelector("#btn-drop")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (leftHand.item?.kind === "weapon") dropLeftHand();
+  else dropRightHand();
+});
+document.querySelector("#btn-armor")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  dropArmorPiece();
+});
+dialogEl.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (lootReveal) {
+    lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
+    return;
+  }
+  if (state === "dialog") advanceDialog();
+});
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!lootReveal) return;
+  e.preventDefault();
+  lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
 });
 
 state = "title";
