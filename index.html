@@ -20,7 +20,7 @@
           </p>
           <button type="button" id="btn-start">OYUNA GİR</button>
           <p class="controls-hint">
-            ←→ hareket · Z/Space zıpla · X saldır · ↑/E kapı · C iksir · R yeniden
+            ←→ hareket · Z/Space zıpla · X saldır · ↑/E kapı · C iksir (yeşil iç / kırmızı at / mavi uç) · R yeniden
           </p>
         </div>
       </div>
@@ -45,9 +45,17 @@
               <span class="ico coin"></span>
               <span id="coin-count">0</span>
             </div>
-            <div class="slot" title="İksir">
-              <span class="ico potion"></span>
+            <div id="heal-slot" class="slot" title="Yeşil can iksiri">
+              <span class="ico potion heal"></span>
               <span id="potion-count">0</span>
+            </div>
+            <div id="poison-slot" class="slot" title="Kırmızı zehir">
+              <span class="ico potion poison"></span>
+              <span id="poison-count">0</span>
+            </div>
+            <div id="fly-slot" class="slot" title="Mavi uçuş">
+              <span class="ico potion fly"></span>
+              <span id="fly-count">0</span>
             </div>
             <div id="key-slot" class="slot badge" title="Anahtar">
               <span class="ico key"></span>
