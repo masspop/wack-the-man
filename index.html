@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="tr">
   <head>
@@ -16,46 +17,72 @@
           <p class="eyebrow">yan kaydır · savaş · keşfet</p>
           <h1>WACK THE MAN</h1>
           <p class="tagline">
-            Kardeşin kayboldu. Evlere gir, silah bul, barlardan geç… kuleye çık.
+            10 seviye. 10 boss. Sol elde silah, sağ elde iksir. Çanta 3 yuva.
+            10. seviyede kardeşin için CERBERUS.
           </p>
           <button type="button" id="btn-start">OYUNA GİR</button>
           <p class="controls-hint">
-            ←→ hareket · Z/Space zıpla · X saldır · ↑/E kapı · C iksir (yeşil iç / kırmızı at / mavi uç) · R yeniden
+            ←→ hareket · Z/Space zıpla · X saldır · C iksir · 1/2/3 çanta · ↑/E
+            kapı/sandık · R yeniden
           </p>
         </div>
       </div>
+
       <div id="wrap">
         <div id="hud" aria-live="polite">
           <div class="hud-left">
             <div class="hp-row">
               <span class="label">CAN</span>
               <div class="hp-bar"><div id="hp-fill"></div></div>
-              <span id="hp-text">1000</span>
+              <span id="hp-text">450</span>
             </div>
-            <div id="zone-name">Köy Kenarı</div>
+            <div id="zone-name">Seviye 1</div>
+            <div id="armor-row" class="armor-row" title="Zırh">
+              <span id="armor-helm" class="armor-ico" data-slot="helm">H</span>
+              <span id="armor-chest" class="armor-ico" data-slot="chest">G</span>
+              <span id="armor-pants" class="armor-ico" data-slot="pants">P</span>
+              <span id="armor-boots" class="armor-ico" data-slot="boots">B</span>
+            </div>
           </div>
           <div class="hud-mid">
-            <div id="weapon-slot" class="weapon-slot">
-              <span id="weapon-name">Yumruk</span>
-              <span id="ammo-text"></span>
+            <div class="hands">
+              <div
+                id="weapon-slot"
+                class="weapon-slot hand-left"
+                title="Sol el — silah (X)"
+              >
+                <span class="hand-tag">SOL</span>
+                <span id="weapon-name">Yumruk</span>
+                <span id="ammo-text"></span>
+              </div>
+              <div
+                id="drink-hand"
+                class="weapon-slot hand-right"
+                title="Sağ el — iksir (C)"
+              >
+                <span class="hand-tag">SAĞ</span>
+                <span id="drink-hand-name">İksir yok</span>
+              </div>
+            </div>
+            <div id="bag-slots" class="bag-slots" title="Çanta — 1 / 2 / 3">
+              <div class="bag-slot" data-bag="0">
+                <span class="bag-num">1</span>
+                <span id="bag-0" class="bag-label">—</span>
+              </div>
+              <div class="bag-slot" data-bag="1">
+                <span class="bag-num">2</span>
+                <span id="bag-1" class="bag-label">—</span>
+              </div>
+              <div class="bag-slot" data-bag="2">
+                <span class="bag-num">3</span>
+                <span id="bag-2" class="bag-label">—</span>
+              </div>
             </div>
           </div>
           <div class="hud-inv">
             <div class="slot" title="Jeton">
               <span class="ico coin"></span>
               <span id="coin-count">0</span>
-            </div>
-            <div id="heal-slot" class="slot" title="Yeşil can iksiri">
-              <span class="ico potion heal"></span>
-              <span id="potion-count">0</span>
-            </div>
-            <div id="poison-slot" class="slot" title="Kırmızı zehir">
-              <span class="ico potion poison"></span>
-              <span id="poison-count">0</span>
-            </div>
-            <div id="fly-slot" class="slot" title="Mavi uçuş">
-              <span class="ico potion fly"></span>
-              <span id="fly-count">0</span>
             </div>
             <div id="key-slot" class="slot badge" title="Anahtar">
               <span class="ico key"></span>
@@ -65,14 +92,18 @@
             </div>
           </div>
         </div>
+
         <canvas id="game" width="960" height="540"></canvas>
+
         <div id="dialog" aria-hidden="true">
           <div class="dialog-name" id="dialog-name"></div>
           <div class="dialog-text" id="dialog-text"></div>
           <div class="dialog-hint">X / Enter — devam</div>
         </div>
+
         <div id="story"></div>
         <div id="hint-toast"></div>
+
         <div id="overlay" aria-hidden="true">
           <div class="overlay-card">
             <h2 id="overlay-title"></h2>
@@ -80,6 +111,7 @@
             <button type="button" id="btn-restart">Yeniden</button>
           </div>
         </div>
+
         <div id="pad" aria-label="Dokunmatik kontroller">
           <div class="pad-left">
             <button type="button" id="btn-left">◀</button>
@@ -87,6 +119,9 @@
             <button type="button" id="btn-enter" class="btn-enter">Kapı</button>
           </div>
           <div class="pad-right">
+            <button type="button" id="btn-bag1" class="btn-bag">1</button>
+            <button type="button" id="btn-bag2" class="btn-bag">2</button>
+            <button type="button" id="btn-bag3" class="btn-bag">3</button>
             <button type="button" id="btn-potion" class="btn-item">İksir</button>
             <button type="button" id="btn-jump" class="btn-jump">Zıpla</button>
             <button type="button" id="btn-punch" class="btn-atk">Vur</button>
