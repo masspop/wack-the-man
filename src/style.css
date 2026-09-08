@@ -163,6 +163,63 @@ body {
   transform: translateY(1px);
 }
 
+.btn-settings-open {
+  border: 3px solid #111;
+  background: #7dffb3;
+  color: #111;
+  font-family: "Press Start 2P", monospace;
+  font-size: 0.55rem;
+  padding: 0.95rem 1.1rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s;
+}
+
+.btn-settings-open:hover {
+  background: #a6ffcb;
+  transform: translateY(-2px);
+}
+
+.settings-card {
+  max-height: min(88vh, 720px);
+  overflow: auto;
+}
+
+.guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+
+.guide-row {
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #2a3a55;
+}
+
+.guide-row strong {
+  display: block;
+  color: var(--gold);
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+}
+
+.guide-row span {
+  font-size: 0.8rem;
+  color: #c8d4e8;
+  line-height: 1.35;
+}
+
+.guide-tips {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+  text-align: left;
+  font-size: 0.8rem;
+  color: #c8d4e8;
+  line-height: 1.45;
+}
+
 .title-actions {
   display: flex;
   flex-wrap: wrap;
@@ -644,7 +701,6 @@ body {
   z-index: 6;
   transition: opacity 0.2s;
 }
-
 #hint-toast.show {
   opacity: 1;
 }
