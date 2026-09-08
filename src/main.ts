@@ -1,5 +1,269 @@
-  creeper: 3500,
-  sphinx: 4300,
+  import "./style.css";
+type Rect = { x: number; y: number; w: number; h: number };
+type Scene = "world" | "interior";
+type EnemyKind = "goblin" | "bruiser" | "bat" | "boss";
+type BossKind =
+  | "ironface"
+  | "cloud"
+  | "mothman"
+  | "anaconda"
+  | "kingkong"
+  | "firefox"
+  | "minotaur"
+  | "creeper"
+  | "sphinx"
+  | "cerberus";
+type WeaponId = "fist" | "knife" | "axe" | "rifle" | "sword" | "lava" | "staff";
+type PotionId = "heal" | "poison" | "fly" | "purple" | "yellow" | "pink";
+type ArmorSlot = "helm" | "chest" | "pants" | "boots";
+type ArmorId = ArmorSlot;
+type CarryWeapon = Exclude<WeaponId, "fist">;
+type CosmeticId =
+  | "elec_tshirt"
+  | "blue_laser_glasses"
+  | "elec_tattoo"
+  | "grey_shoes"
+  | "elec_poop"
+  | "twitch_shoes"
+  | "pink_heart_crown"
+  | "google_hoodie"
+  | "ig_pants"
+  | "youtube_skin"
+  | "metal_armor_pants"
+  | "gold_armor_boots"
+  | "emerald_gloves"
+  | "diamond_chest"
+  | "obsidian_helm"
+  | "red_bowtie"
+  | "rainbow_tux"
+  | "slot_token"
+  | "rainbow_skin";
+type CosmeticSlot =
+  | "body"
+  | "pants"
+  | "boots"
+  | "helm"
+  | "face"
+  | "hands"
+  | "held"
+  | "skin"
+  | "cape";
+type ShopChestId = "detroit" | "google" | "knight" | "gamble";
+type PlayMode = "solo" | "peaceful" | "survivor";
+type InvItem =
+  | { kind: "weapon"; id: CarryWeapon; ammo?: number }
+  | { kind: "potion"; id: PotionId };
+type ChestType =
+  | "wood"
+  | "thorny"
+  | "sticky"
+  | "diamond"
+  | "obsidian"
+  | "none";
+type GameState = "title" | "playing" | "dialog" | "win" | "dead" | "spectate";
+type ProjKind =
+  | "arrow"
+  | "club"
+  | "spit"
+  | "rain"
+  | "poison"
+  | "bolt"
+  | "venom"
+  | "cotton"
+  | "bullet"
+  | "fire"
+  | "magic"
+  | "blade"
+  | "head"
+  | "spike"
+  | "anvil"
+  | "spark"
+  | "breath"
+  | "horn"
+  | "punch";
+
+type Enemy = Rect & {
+  kind: EnemyKind;
+  bossKind?: BossKind;
+  name: string;
+  vx: number;
+  vy: number;
+  hp: number;
+  maxHp: number;
+  hurt: number;
+  alive: boolean;
+  patrolL: number;
+  patrolR: number;
+  facing: 1 | -1;
+  flash: number;
+  attackCd: number;
+  phase: number;
+  telegraph: number;
+  raining: number;
+  rainSpawned: number;
+  grounded: boolean;
+  introDone: boolean;
+  headHp?: [number, number, number];
+  unhittable?: boolean;
+};
+
+type WorldItem = Rect & {
+  kind: "coin" | "key" | "medallion";
+  taken: boolean;
+  bob: number;
+};
+
+type Projectile = Rect & {
+  kind: ProjKind;
+  vx: number;
+  vy: number;
+  dmg: number;
+  life: number;
+  hostile: boolean;
+  alive: boolean;
+};
+
+type Door = Rect & {
+  id: string;
+  label: string;
+  target: "interior";
+  interiorId: string;
+  needsKey: boolean;
+};
+
+type InteriorDef = {
+  id: string;
+  title: string;
+  kind: "house" | "bar";
+  exitX: number;
+  returnX: number;
+  returnY: number;
+};
+
+type Chest = Rect & {
+  type: ChestType;
+  opened: boolean;
+  isParchment: boolean;
+};
+
+type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+  size: number;
+};
+
+type DialogLine = { name: string; text: string };
+
+type Hazard = Rect & {
+  kind: "lava" | "platform" | "trap";
+  dmg: number;
+  life: number;
+  tick: number;
+};
+
+type Plat = Rect & { oneWay?: boolean };
+
+type GroundDrop = Rect & {
+  kind: "weapon" | "armor";
+  id: CarryWeapon | ArmorSlot;
+  ammo?: number;
+  enchanted?: boolean;
+  armorAbsorb?: number;
+  bob: number;
+  sparkle: number;
+};
+
+type Ally = Rect & {
+  hp: number;
+  maxHp: number;
+  facing: 1 | -1;
+  attackCd: number;
+  alive: boolean;
+  vx: number;
+  vy: number;
+};
+
+type PlatTrap = Rect & {
+  dmg: number;
+  tick: number;
+};
+
+const MAX_LEVEL = 10;
+const PLAYER_MAX_HP = 1000;
+const COIN_TO_DOLLAR = 5;
+const SAVE_KEY = "wtm_save_v2";
+const ACCOUNTS_KEY = "wtm_accounts_v1";
+const SESSION_KEY = "wtm_session_v1";
+
+type CosmeticDef = {
+  id: CosmeticId;
+  label: string;
+  slot: CosmeticSlot;
+  colors: Record<string, string>;
+};
+
+const COSMETICS: Record<CosmeticId, CosmeticDef> = {
+  elec_tshirt: {
+    id: "elec_tshirt",
+    label: "Elektrikli Tişört",
+    slot: "body",
+    colors: { body: "#1a3048", accent: "#4aa8ff", glow: "#7ad0ff" },
+  },
+  blue_laser_glasses: {
+    id: "blue_laser_glasses",
+    label: "Mavi Lazerli Gözlük",
+    slot: "face",
+    colors: { frame: "#0a1a30", lens: "#3a90ff", beam: "#6ab0ff" },
+  },
+  elec_tattoo: {
+    id: "elec_tattoo",
+    label: "Elektrik Dövmesi",
+    slot: "cape",
+    colors: { ink: "#4aa8ff", spark: "#a0e0ff" },
+  },
+  grey_shoes: {
+    id: "grey_shoes",
+    label: "Gri Ayakkabı",
+    slot: "boots",
+    colors: { boots: "#7a8088" },
+  },
+  elec_poop: {
+    id: "elec_poop",
+    label: "Elektrikli Bok (kafa üstü)",
+    slot: "helm",
+    colors: { brown: "#6a4020", glow: "#4aa8ff" },
+  },
+  twitch_shoes: {
+    id: "twitch_shoes",
+    label: "Twitch Logolu Ayakkabı",
+    slot: "boots",
+    colors: { boots: "#9146ff", logo: "#ffffff" },
+  },
+  pink_heart_crown: {
+    id: "pink_heart_crown",
+    label: "Kalpli Pembe Taç",
+    slot: "helm",
+    colors: { crown: "#ff7ad9", heart: "#ff3a8a", gem: "#ffe0f0" },
+  },
+  google_hoodie: {
+    id: "google_hoodie",
+    label: "Google Logolu Hoodie",
+    slot: "body",
+    colors: {
+      body: "#4285f4",
+      r: "#ea4335",
+      y: "#fbbc05",
+      g: "#34a853",
+      b: "#4285f4",
+    },
+  },
+  ig_pants: {
+    id: "ig_pants",
+    label: "Instagram Renkli Pantolon",  sphinx: 4300,
   cerberus: 5400,
 };
 
