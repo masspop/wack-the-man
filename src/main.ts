@@ -6296,3 +6296,119 @@ friendSearchInput.addEventListener("keydown", (e) => {
     searchFriends();
   }
 });
+function bindHold(sel: string, key: string) {
+  const el = document.querySelector<HTMLElement>(sel)!;
+  const on = (ev: PointerEvent) => {
+    ev.preventDefault();
+    try {
+      el.setPointerCapture(ev.pointerId);
+    } catch {
+      /* ignore */
+    }
+    keys.add(key);
+  };
+  const off = (ev: Event) => {
+    ev.preventDefault();
+    keys.delete(key);
+  };
+  el.addEventListener("pointerdown", on);
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointercancel", off);
+  el.addEventListener("lostpointercapture", off);
+}
+bindHold("#btn-left", "ArrowLeft");
+bindHold("#btn-right", "ArrowRight");
+bindHold("#btn-jump", " ");
+bindHold("#btn-punch", "x");
+bindHold("#btn-enter", "e");
+bindHold("#btn-bag1", "1");
+bindHold("#btn-bag2", "2");
+bindHold("#btn-bag3", "3");
+document.querySelector("#btn-potion")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  usePotion();
+});
+document.querySelector("#btn-drop")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (leftHand.item?.kind === "weapon") dropLeftHand();
+  else dropRightHand();
+});
+document.querySelector("#btn-armor")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  dropArmorPiece();
+});
+dialogEl.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (lootReveal) {
+    lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
+    return;
+  }
+  if (state === "dialog") advanceDialog();
+});
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!lootReveal) return;
+  e.preventDefault();
+  lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
+});
+
+(function seedDemoAccounts() {
+  const map = loadAccounts();
+  if (Object.keys(map).length > 0) return;
+  const demos = ["NeonKid", "BarRat", "ShadowFox"];
+  for (const u of demos) {
+    map[u.toLowerCase()] = {
+      user: u,
+      pass: "1234",
+      coins: 20,
+      owned: [],
+      equipped: {},
+      friends: [],
+      incoming: [],
+      outgoing: [],
+    };
+  }
+  saveAccounts(map);
+})();
+loadSave();
+if (currentUser) {
+  authUserInput.value = currentUser;
+  authStatus.textContent = `Giriş: ${currentUser}`;
+}
+refreshShopUi();
+refreshFriendsUi();
+refreshTitleWallet();
+drawProfileFace();
+state = "title";
+buildWorld();
+player.x = 200;
+updateHud();
+requestAnimationFrame(loop);
+
+if (typeof location !== "undefined" && location.search.includes("debug=1")) {
+  (window as unknown as { wtmDebug: Record<string, unknown> }).wtmDebug = {
+    grantItem,
+    grantArmor,
+    swapBagSlot,
+    tryEnterDoor,
+    leftHand,
+    rightHand,
+    bag,
+    armor,
+    inventory,
+    player,
+    buildWorld,
+    updateHud,
+    getState: () => state,
+    setLevel: (n: number) => {
+      level = n;
+      scene = "world";
+      currentInterior = null;
+      chest = null;
+      player.x = 80;
+      player.y = GROUND_Y - player.h;
+      buildWorld();
+      updateHud();
+    },
+  };
+}
