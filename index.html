@@ -78,6 +78,9 @@
               <button type="button" id="btn-shop-open" class="btn-shop-open">
                 MAĞAZA
               </button>
+              <button type="button" id="btn-settings-open" class="btn-settings-open">
+                AYARLAR
+              </button>
             </div>
 
             <p class="controls-hint">
@@ -157,6 +160,32 @@
             <div id="shop-list" class="shop-list"></div>
             <h3 class="shop-sub">Koleksiyon / Kuşan</h3>
             <div id="costume-list" class="costume-list"></div>
+          </div>
+        </div>
+
+        <div id="settings-panel" class="shop-panel" aria-hidden="true">
+          <div class="shop-card settings-card">
+            <div class="shop-head">
+              <h2>AYARLAR / REHBER</h2>
+              <button type="button" id="btn-settings-close" class="shop-close">
+                ✕
+              </button>
+            </div>
+            <p class="shop-rate">
+              Yeni başlayanlar için silah ve iksir özeti. Oyun içinde C = iksir,
+              X = saldırı.
+            </p>
+            <h3 class="shop-sub">Silahlar</h3>
+            <div id="guide-weapons" class="guide-list"></div>
+            <h3 class="shop-sub">İksirler</h3>
+            <div id="guide-potions" class="guide-list"></div>
+            <h3 class="shop-sub">İpuçları</h3>
+            <ul class="guide-tips">
+              <li>Her seviyede 2 bar var — ikisinde de üst katta sandık.</li>
+              <li>Boş sandıktan Rocket Raccoon parşömeni çıkar (poster ayrı bina değil).</li>
+              <li>Boss’lar seviye 1’den 10’a doğru giderek güçlenir.</li>
+              <li>Anahtar platformlarda; bar kapısı kilitli olabilir.</li>
+            </ul>
           </div>
         </div>
       </div>
