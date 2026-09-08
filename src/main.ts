@@ -1,284 +1,3 @@
-import "./style.css";
-
-type Rect = { x: number; y: number; w: number; h: number };
-type Scene = "world" | "interior";
-type EnemyKind = "goblin" | "bruiser" | "bat" | "boss";
-type BossKind =
-  | "ironface"
-  | "cloud"
-  | "mothman"
-  | "anaconda"
-  | "kingkong"
-  | "firefox"
-  | "minotaur"
-  | "creeper"
-  | "sphinx"
-  | "cerberus";
-type WeaponId = "fist" | "knife" | "axe" | "rifle" | "sword" | "lava" | "staff";
-type PotionId = "heal" | "poison" | "fly" | "purple" | "yellow" | "pink";
-type ArmorSlot = "helm" | "chest" | "pants" | "boots";
-type ArmorId = ArmorSlot;
-type CarryWeapon = Exclude<WeaponId, "fist">;
-type InvItem =
-  | { kind: "weapon"; id: CarryWeapon; ammo?: number }
-  | { kind: "potion"; id: PotionId };
-type ChestType =
-  | "wood"
-  | "thorny"
-  | "sticky"
-  | "diamond"
-  | "obsidian"
-  | "none";
-type GameState = "title" | "playing" | "dialog" | "win" | "dead";
-type ProjKind =
-  | "arrow"
-  | "club"
-  | "spit"
-  | "rain"
-  | "poison"
-  | "bolt"
-  | "venom"
-  | "cotton"
-  | "bullet"
-  | "fire"
-  | "magic"
-  | "blade"
-  | "head"
-  | "spike"
-  | "anvil"
-  | "spark"
-  | "breath"
-  | "horn"
-  | "punch";
-
-type Enemy = Rect & {
-  kind: EnemyKind;
-  bossKind?: BossKind;
-  name: string;
-  vx: number;
-  vy: number;
-  hp: number;
-  maxHp: number;
-  hurt: number;
-  alive: boolean;
-  patrolL: number;
-  patrolR: number;
-  facing: 1 | -1;
-  flash: number;
-  attackCd: number;
-  phase: number;
-  telegraph: number;
-  raining: number;
-  rainSpawned: number;
-  grounded: boolean;
-  introDone: boolean;
-  headHp?: [number, number, number];
-  unhittable?: boolean;
-};
-
-type WorldItem = Rect & {
-  kind: "coin" | "key" | "medallion";
-  taken: boolean;
-  bob: number;
-};
-
-type Projectile = Rect & {
-  kind: ProjKind;
-  vx: number;
-  vy: number;
-  dmg: number;
-  life: number;
-  hostile: boolean;
-  alive: boolean;
-};
-
-type Door = Rect & {
-  id: string;
-  label: string;
-  target: "interior";
-  interiorId: string;
-  needsKey: boolean;
-};
-
-type InteriorDef = {
-  id: string;
-  title: string;
-  kind: "house" | "bar";
-  exitX: number;
-  returnX: number;
-  returnY: number;
-};
-
-type Chest = Rect & {
-  type: ChestType;
-  opened: boolean;
-  isParchment: boolean;
-};
-
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: string;
-  size: number;
-};
-
-type DialogLine = { name: string; text: string };
-
-type Hazard = Rect & {
-  kind: "lava" | "platform" | "trap";
-  dmg: number;
-  life: number;
-  tick: number;
-};
-
-type Plat = Rect & { oneWay?: boolean };
-
-type GroundDrop = Rect & {
-  kind: "weapon" | "armor";
-  id: CarryWeapon | ArmorSlot;
-  ammo?: number;
-  enchanted?: boolean;
-  armorAbsorb?: number;
-  bob: number;
-  sparkle: number;
-};
-
-type Ally = Rect & {
-  hp: number;
-  maxHp: number;
-  facing: 1 | -1;
-  attackCd: number;
-  alive: boolean;
-  vx: number;
-  vy: number;
-};
-
-type PlatTrap = Rect & {
-  dmg: number;
-  tick: number;
-};
-
-const MAX_LEVEL = 10;
-
-const WEAPON_BASE: Record<WeaponId, number> = {
-  fist: 25,
-  knife: 80,
-  axe: 115,
-  rifle: 190,
-  sword: 260,
-  lava: 295,
-  staff: 380,
-};
-
-const WEAPONS: Record<
-  WeaponId,
-  { label: string; cooldown: number; range: number; ammoMax: number }
-> = {
-  fist: { label: "Yumruk", cooldown: 0.28, range: 34, ammoMax: 0 },
-  knife: { label: "Çakı", cooldown: 0.12, range: 36, ammoMax: 0 },
-  axe: { label: "Balta", cooldown: 0.45, range: 42, ammoMax: 0 },
-  rifle: { label: "Tüfek", cooldown: 0.4, range: 320, ammoMax: 5 },
-  sword: { label: "Kılıç", cooldown: 0.28, range: 44, ammoMax: 0 },
-  lava: { label: "Lav Silahı", cooldown: 0.35, range: 120, ammoMax: 0 },
-  staff: { label: "Büyülü Asa", cooldown: 0.38, range: 280, ammoMax: 0 },
-};
-
-const POTIONS: Record<PotionId, { label: string; color: string; hint: string }> =
-  {
-    heal: {
-      label: "Recovery",
-      color: "#3dff7a",
-      hint: "Yeşil · iç · +200–350 can",
-    },
-    poison: {
-      label: "Krypton",
-      color: "#ff3a3a",
-      hint: "Kırmızı · at · düşmana 250–300",
-    },
-    fly: {
-      label: "Pigeon",
-      color: "#4aa8ff",
-      hint: "Mavi · iç · 5 sn uçuş",
-    },
-    purple: {
-      label: "Enchant",
-      color: "#b44dff",
-      hint: "Mor · yere at · eşyanın üstüne dök",
-    },
-    yellow: {
-      label: "TheReeker",
-      color: "#ffd24a",
-      hint: "Sarı · iç · 8 sn görünmezlik",
-    },
-    pink: {
-      label: "Splındog",
-      color: "#ff7ad9",
-      hint: "Pembe · yere at · 2 asalı müttefik",
-    },
-  };
-
-/** drink = içilen · throw = atılan · ground = yere atılıp dökülen/çağırılan */
-const POTION_USE: Record<PotionId, "drink" | "throw" | "ground"> = {
-  heal: "drink",
-  fly: "drink",
-  yellow: "drink",
-  poison: "throw",
-  purple: "ground",
-  pink: "ground",
-};
-
-type ThrownBottle = {
-  id: PotionId;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  w: number;
-  h: number;
-  color: string;
-  life: number;
-  spin: number;
-  alive: boolean;
-};
-
-const ARMOR_BLOCK: Record<ArmorSlot, number> = {
-  helm: 0.45,
-  chest: 0.6,
-  pants: 0.35,
-  boots: 0.25,
-};
-
-const ARMOR_LABEL: Record<ArmorSlot, string> = {
-  helm: "Miğfer",
-  chest: "Göğüslük",
-  pants: "Pantolon",
-  boots: "Çizme",
-};
-
-const BOSS_ORDER: BossKind[] = [
-  "ironface",
-  "cloud",
-  "mothman",
-  "anaconda",
-  "kingkong",
-  "firefox",
-  "minotaur",
-  "creeper",
-  "sphinx",
-  "cerberus",
-];
-
-const BOSS_HP: Record<BossKind, number> = {
-  ironface: 700,
-  cloud: 800,
-  mothman: 1000,
-  anaconda: 1300,
-  kingkong: 1700,
-  firefox: 2200,
-  minotaur: 2800,
   creeper: 3500,
   sphinx: 4300,
   cerberus: 5400,
@@ -304,6 +23,26 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const ctx = canvas.getContext("2d")!;
 const wrap = document.querySelector<HTMLElement>("#wrap")!;
 const titleEl = document.querySelector<HTMLElement>("#title-screen")!;
+const shopPanel = document.querySelector<HTMLElement>("#shop-panel")!;
+const shopList = document.querySelector<HTMLElement>("#shop-list")!;
+const costumeList = document.querySelector<HTMLElement>("#costume-list")!;
+const shopBalance = document.querySelector<HTMLElement>("#shop-balance")!;
+const titleWallet = document.querySelector<HTMLElement>("#title-wallet")!;
+const lobbyPanel = document.querySelector<HTMLElement>("#lobby-panel")!;
+const lobbyInvites = document.querySelector<HTMLElement>("#lobby-invites")!;
+const lobbyFriendPick = document.querySelector<HTMLElement>("#lobby-friend-pick")!;
+const friendSearchInput = document.querySelector<HTMLInputElement>("#friend-search")!;
+const friendSearchResults = document.querySelector<HTMLElement>("#friend-search-results")!;
+const friendRequestsEl = document.querySelector<HTMLElement>("#friend-requests")!;
+const friendListEl = document.querySelector<HTMLElement>("#friend-list")!;
+const authUserInput = document.querySelector<HTMLInputElement>("#auth-user")!;
+const authPassInput = document.querySelector<HTMLInputElement>("#auth-pass")!;
+const authStatus = document.querySelector<HTMLElement>("#auth-status")!;
+const profileFace = document.querySelector<HTMLCanvasElement>("#profile-face")!;
+const modeTag = document.querySelector<HTMLElement>("#mode-tag")!;
+const spectateBanner = document.querySelector<HTMLElement>("#spectate-banner")!;
+const roomCodeInput = document.querySelector<HTMLInputElement>("#room-code")!;
+const roomStatus = document.querySelector<HTMLElement>("#room-status")!;
 const overlay = document.querySelector<HTMLElement>("#overlay")!;
 const overlayTitle = document.querySelector<HTMLElement>("#overlay-title")!;
 const overlayText = document.querySelector<HTMLElement>("#overlay-text")!;
@@ -457,6 +196,55 @@ const inventory = {
   medallion: false,
 };
 
+const ownedCosmetics = new Set<CosmeticId>();
+const equippedCosmetics: Partial<Record<CosmeticSlot, CosmeticId>> = {};
+let helmOpen = true;
+
+type AccountData = {
+  user: string;
+  pass: string;
+  coins: number;
+  owned: CosmeticId[];
+  equipped: Partial<Record<CosmeticSlot, CosmeticId>>;
+  friends: string[];
+  incoming: string[];
+  outgoing: string[];
+};
+
+type MpPeer = {
+  name: string;
+  isLocal: boolean;
+  isBot: boolean;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  vx: number;
+  vy: number;
+  hp: number;
+  maxHp: number;
+  facing: 1 | -1;
+  alive: boolean;
+  invuln: number;
+  attackCd: number;
+  onGround: boolean;
+  color: string;
+};
+
+let currentUser: string | null = null;
+let playMode: PlayMode = "solo";
+let lobbyInvited: string[] = [];
+let lobbyModePick: "peaceful" | "survivor" = "peaceful";
+const mpPeers: MpPeer[] = [];
+let spectateTarget: string | null = null;
+let survivorSettled = false;
+let returningToHub = false;
+let roomCode: string | null = null;
+let roomRole: "host" | "guest" | null = null;
+let roomChannel: BroadcastChannel | null = null;
+let roomSyncAcc = 0;
+const remoteHumanNames = new Set<string>();
+
 const player: Rect & { vx: number; vy: number; hp: number; maxHp: number } = {
   x: 80,
   y: GROUND_Y - 52,
@@ -464,8 +252,8 @@ const player: Rect & { vx: number; vy: number; hp: number; maxHp: number } = {
   h: 52,
   vx: 0,
   vy: 0,
-  hp: 450,
-  maxHp: 450,
+  hp: PLAYER_MAX_HP,
+  maxHp: PLAYER_MAX_HP,
 };
 
 let audioCtx: AudioContext | null = null;
@@ -524,6 +312,1256 @@ function sfxDialog() {
   beep(520, 0.03, "sine", 0.02);
 }
 
+function dollarsFromCoins(n: number) {
+  return n * COIN_TO_DOLLAR;
+}
+
+function loadAccounts(): Record<string, AccountData> {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw) as Record<string, AccountData>;
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAccounts(map: Record<string, AccountData>) {
+  try {
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
+
+function getAccount(user: string): AccountData | null {
+  const map = loadAccounts();
+  return map[user.toLowerCase()] ?? null;
+}
+
+function putAccount(acc: AccountData) {
+  const map = loadAccounts();
+  map[acc.user.toLowerCase()] = acc;
+  saveAccounts(map);
+}
+
+function syncAccountFromRuntime() {
+  if (!currentUser) return;
+  const acc = getAccount(currentUser);
+  if (!acc) return;
+  acc.coins = inventory.coins;
+  acc.owned = [...ownedCosmetics];
+  acc.equipped = { ...equippedCosmetics };
+  putAccount(acc);
+}
+
+function applyAccount(acc: AccountData) {
+  currentUser = acc.user;
+  inventory.coins = Math.max(0, Math.floor(acc.coins || 0));
+  ownedCosmetics.clear();
+  for (const id of acc.owned || []) {
+    if (id in COSMETICS) ownedCosmetics.add(id);
+  }
+  for (const k of Object.keys(equippedCosmetics) as CosmeticSlot[]) {
+    delete equippedCosmetics[k];
+  }
+  const eq = acc.equipped || {};
+  for (const [slot, id] of Object.entries(eq) as [CosmeticSlot, CosmeticId][]) {
+    if (id in COSMETICS && ownedCosmetics.has(id)) equippedCosmetics[slot] = id;
+  }
+  try {
+    localStorage.setItem(SESSION_KEY, acc.user);
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadSave() {
+  // migrate v1 coins if no session
+  try {
+    const session = localStorage.getItem(SESSION_KEY);
+    if (session) {
+      const acc = getAccount(session);
+      if (acc) {
+        applyAccount(acc);
+        return;
+      }
+    }
+    const raw = localStorage.getItem("wtm_save_v1") || localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw) as {
+      coins?: number;
+      owned?: string[];
+      equipped?: unknown;
+    };
+    if (typeof data.coins === "number" && data.coins >= 0) {
+      inventory.coins = Math.floor(data.coins);
+    }
+    if (Array.isArray(data.owned)) {
+      for (const id of data.owned) {
+        if (typeof id === "string" && id in COSMETICS) {
+          ownedCosmetics.add(id as CosmeticId);
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function saveProgress() {
+  syncAccountFromRuntime();
+  try {
+    localStorage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        coins: inventory.coins,
+        owned: [...ownedCosmetics],
+        equipped: equippedCosmetics,
+        user: currentUser,
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function addCoins(n: number) {
+  inventory.coins = Math.max(0, inventory.coins + n);
+  saveProgress();
+  updateHud();
+  refreshShopUi();
+  refreshTitleWallet();
+}
+
+function refreshTitleWallet() {
+  const d = dollarsFromCoins(inventory.coins);
+  titleWallet.textContent = `${inventory.coins} coin · $${d}`;
+}
+
+function rollShopChestLoot(id: ShopChestId): LootEntry {
+  const table = SHOP_CHESTS[id].loot;
+  const total = table.reduce((s, e) => s + e.weight, 0);
+  let r = Math.random() * total;
+  for (const e of table) {
+    r -= e.weight;
+    if (r <= 0) return e;
+  }
+  return table[table.length - 1]!;
+}
+
+function openShop() {
+  closeLobby();
+  shopPanel.classList.add("open");
+  shopPanel.setAttribute("aria-hidden", "false");
+  refreshShopUi();
+  beep(440, 0.05, "sine", 0.025);
+}
+
+function closeShop() {
+  shopPanel.classList.remove("open");
+  shopPanel.setAttribute("aria-hidden", "true");
+}
+
+function openLobby() {
+  if (!currentUser) {
+    showHint("Önce giriş yap");
+    return;
+  }
+  closeShop();
+  lobbyPanel.classList.add("open");
+  lobbyPanel.setAttribute("aria-hidden", "false");
+  refreshLobbyUi();
+  beep(400, 0.05, "triangle", 0.02);
+}
+
+function closeLobby() {
+  lobbyPanel.classList.remove("open");
+  lobbyPanel.setAttribute("aria-hidden", "true");
+}
+
+function grantCosmetic(id: CosmeticId) {
+  ownedCosmetics.add(id);
+  const slot = COSMETICS[id].slot;
+  equippedCosmetics[slot] = id;
+  saveProgress();
+  drawProfileFace();
+}
+
+function buyChest(id: ShopChestId) {
+  if (!currentUser) {
+    showHint("Mağaza için giriş gerekli");
+    return;
+  }
+  const item = SHOP_CHESTS[id];
+  if (inventory.coins < item.priceCoins) {
+    showHint(`Yetersiz coin · ${item.priceCoins} lazım ($${item.priceUsd})`);
+    beep(90, 0.08, "square", 0.025);
+    return;
+  }
+  inventory.coins -= item.priceCoins;
+  const drop = rollShopChestLoot(id);
+  saveProgress();
+  refreshShopUi();
+  updateHud();
+  refreshTitleWallet();
+  sfxPickup();
+  if (!drop.id) {
+    showStory(`${item.label} açıldı… BOŞ çıktı!`);
+    showHint("Şanssız — boş sandık");
+    return;
+  }
+  grantCosmetic(drop.id);
+  showStory(`${item.label} açıldı! → ${drop.label}`);
+  showHint(`Kazandın: ${drop.label}`);
+}
+
+function equipCosmetic(id: CosmeticId) {
+  if (!ownedCosmetics.has(id)) {
+    showHint("Önce sandıktan aç");
+    return;
+  }
+  const def = COSMETICS[id];
+  if (equippedCosmetics[def.slot] === id) {
+    delete equippedCosmetics[def.slot];
+  } else {
+    equippedCosmetics[def.slot] = id;
+  }
+  saveProgress();
+  refreshShopUi();
+  drawProfileFace();
+  beep(520, 0.05, "triangle", 0.02);
+  showHint(`${def.label} ${equippedCosmetics[def.slot] === id ? "kuşanıldı" : "çıkarıldı"}`);
+}
+function drawShopChestArt(
+  c: CanvasRenderingContext2D,
+  theme: ShopChestId,
+  w: number,
+  h: number,
+) {
+  c.clearRect(0, 0, w, h);
+  if (theme === "detroit") {
+    const g = c.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, "#0a1828");
+    g.addColorStop(0.5, "#1a3a58");
+    g.addColorStop(1, "#0e2030");
+    c.fillStyle = g;
+    c.fillRect(8, 22, w - 16, h - 30);
+    c.fillStyle = "#4aa8ff";
+    c.globalAlpha = 0.55 + Math.sin(Date.now() / 200) * 0.2;
+    c.fillRect(12, 36, w - 24, 4);
+    c.globalAlpha = 1;
+    c.fillStyle = "#7ad0ff";
+    c.fillRect(w / 2 - 8, 28, 16, 8);
+    c.strokeStyle = "#3a90c0";
+    c.lineWidth = 2;
+    c.strokeRect(8, 22, w - 16, h - 30);
+    c.fillStyle = "#9ad1ff";
+    c.font = "8px monospace";
+    c.fillText("DETROIT", 18, 18);
+  } else if (theme === "google") {
+    c.fillStyle = "#f4f0e6";
+    c.fillRect(10, 28, w - 20, h - 36);
+    c.strokeStyle = "#dadce0";
+    c.lineWidth = 2;
+    c.strokeRect(10, 28, w - 20, h - 36);
+    const cols = ["#ea4335", "#fbbc05", "#34a853", "#4285f4"];
+    for (let i = 0; i < 4; i++) {
+      c.fillStyle = cols[i]!;
+      c.beginPath();
+      c.arc(22 + i * 14, 18, 6, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = "#4285f4";
+    c.font = "bold 10px sans-serif";
+    c.fillText("G", w / 2 - 5, 52);
+  } else if (theme === "knight") {
+    c.fillStyle = "#6a7888";
+    c.fillRect(10, 26, w - 20, h - 34);
+    c.fillStyle = "#8a949e";
+    c.fillRect(14, 32, w - 28, 10);
+    c.fillStyle = "#3a5040";
+    c.fillRect(12, 18, w - 24, 12);
+    c.fillStyle = "#5dff7a";
+    for (let i = 0; i < 5; i++) {
+      c.fillRect(16 + i * 12, 14, 3, 8);
+    }
+    // daisy
+    c.fillStyle = "#ffe08a";
+    c.beginPath();
+    c.arc(w / 2, 16, 5, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#fff";
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      c.beginPath();
+      c.arc(w / 2 + Math.cos(a) * 7, 16 + Math.sin(a) * 7, 3, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = "#d4a017";
+    c.fillRect(w / 2 - 6, 48, 12, 8);
+  } else {
+    const cols = ["#ff3a3a", "#fbbc05", "#34a853", "#4285f4", "#9146ff"];
+    for (let i = 0; i < 5; i++) {
+      c.fillStyle = cols[i]!;
+      c.fillRect(8 + i * ((w - 16) / 5), 24, (w - 16) / 5, h - 32);
+    }
+    c.fillStyle = "#f5c518";
+    c.beginPath();
+    c.arc(w / 2, 18, 12, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#111";
+    c.font = "bold 9px sans-serif";
+    c.fillText("$", w / 2 - 3, 21);
+    c.strokeStyle = "#111";
+    c.strokeRect(8, 24, w - 16, h - 32);
+  }
+}
+
+function refreshShopUi() {
+  refreshTitleWallet();
+  const d = dollarsFromCoins(inventory.coins);
+  shopBalance.textContent = `Bakiye: ${inventory.coins} coin · $${d}`;
+
+  shopList.innerHTML = "";
+  for (const id of Object.keys(SHOP_CHESTS) as ShopChestId[]) {
+    const item = SHOP_CHESTS[id];
+    const el = document.createElement("div");
+    el.className = "shop-item shop-chest-item";
+    const canvas = document.createElement("canvas");
+    canvas.width = 88;
+    canvas.height = 72;
+    canvas.className = "chest-art";
+    drawShopChestArt(canvas.getContext("2d")!, id, 88, 72);
+    const odds = item.loot
+      .map((e) => `%${e.weight} ${e.label}`)
+      .join(" · ");
+    el.innerHTML = `
+      <div class="chest-art-wrap"></div>
+      <h4>${item.label}</h4>
+      <div class="price">${item.priceCoins} coin<br>$${item.priceUsd}</div>
+      <p>${item.blurb}<br><span class="odds">${odds}</span></p>
+      <button type="button">AÇ (${item.priceCoins})</button>
+    `;
+    el.querySelector(".chest-art-wrap")!.appendChild(canvas);
+    el.querySelector("button")!.addEventListener("click", () => buyChest(id));
+    shopList.appendChild(el);
+  }
+
+  costumeList.innerHTML = "";
+  if (ownedCosmetics.size === 0) {
+    const empty = document.createElement("p");
+    empty.className = "shop-empty";
+    empty.textContent = "Henüz parça yok — sandık aç.";
+    costumeList.appendChild(empty);
+  }
+  for (const id of ownedCosmetics) {
+    const c = COSMETICS[id];
+    const on = equippedCosmetics[c.slot] === id;
+    const el = document.createElement("div");
+    el.className = `costume-item${on ? " equipped" : ""}`;
+    el.innerHTML = `
+      <h4>${c.label}</h4>
+      ${on ? '<span class="tag">KUŞANILI</span>' : '<button type="button">KUŞAN</button>'}
+      <p>Slot: ${c.slot}</p>
+    `;
+    const btn = el.querySelector("button");
+    if (btn) btn.addEventListener("click", () => equipCosmetic(id));
+    costumeList.appendChild(el);
+  }
+}
+
+function normalizeUser(s: string) {
+  return s.trim().slice(0, 16);
+}
+
+function registerAccount() {
+  const user = normalizeUser(authUserInput.value);
+  const pass = authPassInput.value.slice(0, 32);
+  if (user.length < 2) {
+    authStatus.textContent = "Kullanıcı adı en az 2 karakter";
+    return;
+  }
+  if (pass.length < 2) {
+    authStatus.textContent = "Parola en az 2 karakter";
+    return;
+  }
+  if (getAccount(user)) {
+    authStatus.textContent = "Bu isim alınmış — giriş yap";
+    return;
+  }
+  const acc: AccountData = {
+    user,
+    pass,
+    coins: Math.max(inventory.coins, 50),
+    owned: [...ownedCosmetics],
+    equipped: { ...equippedCosmetics },
+    friends: [],
+    incoming: [],
+    outgoing: [],
+  };
+  putAccount(acc);
+  applyAccount(acc);
+  authStatus.textContent = `Kayıt OK · ${user}`;
+  refreshFriendsUi();
+  refreshTitleWallet();
+  drawProfileFace();
+  saveProgress();
+  beep(660, 0.06, "sine", 0.03);
+}
+
+function loginAccount() {
+  const user = normalizeUser(authUserInput.value);
+  const pass = authPassInput.value.slice(0, 32);
+  const acc = getAccount(user);
+  if (!acc || acc.pass !== pass) {
+    authStatus.textContent = "Kullanıcı / parola hatalı";
+    beep(90, 0.08, "square", 0.025);
+    return;
+  }
+  applyAccount(acc);
+  authUserInput.value = acc.user;
+  authStatus.textContent = `Giriş: ${acc.user}`;
+  refreshFriendsUi();
+  refreshShopUi();
+  refreshTitleWallet();
+  drawProfileFace();
+  beep(520, 0.05, "triangle", 0.025);
+}
+
+function sendFriendRequest(target: string) {
+  if (!currentUser) {
+    showHint("Önce giriş yap");
+    return;
+  }
+  const me = getAccount(currentUser);
+  const them = getAccount(target);
+  if (!me || !them) {
+    showHint("Kullanıcı bulunamadı");
+    return;
+  }
+  if (me.user.toLowerCase() === them.user.toLowerCase()) {
+    showHint("Kendine istek atılmaz");
+    return;
+  }
+  if (me.friends.includes(them.user)) {
+    showHint("Zaten arkadaşsınız");
+    return;
+  }
+  if (!them.incoming.includes(me.user)) them.incoming.push(me.user);
+  if (!me.outgoing.includes(them.user)) me.outgoing.push(them.user);
+  putAccount(me);
+  putAccount(them);
+  refreshFriendsUi();
+  showHint(`İstek gönderildi: ${them.user}`);
+}
+
+function acceptFriend(from: string) {
+  if (!currentUser) return;
+  const me = getAccount(currentUser);
+  const them = getAccount(from);
+  if (!me || !them) return;
+  me.incoming = me.incoming.filter((u) => u !== from);
+  them.outgoing = them.outgoing.filter((u) => u !== me.user);
+  if (!me.friends.includes(them.user)) me.friends.push(them.user);
+  if (!them.friends.includes(me.user)) them.friends.push(me.user);
+  putAccount(me);
+  putAccount(them);
+  refreshFriendsUi();
+  showHint(`Arkadaş: ${them.user}`);
+}
+
+function rejectFriend(from: string) {
+  if (!currentUser) return;
+  const me = getAccount(currentUser);
+  const them = getAccount(from);
+  if (!me) return;
+  me.incoming = me.incoming.filter((u) => u !== from);
+  putAccount(me);
+  if (them) {
+    them.outgoing = them.outgoing.filter((u) => u !== me.user);
+    putAccount(them);
+  }
+  refreshFriendsUi();
+}
+
+function searchFriends() {
+  const q = normalizeUser(friendSearchInput.value).toLowerCase();
+  friendSearchResults.innerHTML = "";
+  if (!q) return;
+  const map = loadAccounts();
+  const hits = Object.values(map).filter((a) =>
+    a.user.toLowerCase().includes(q),
+  );
+  if (!hits.length) {
+    friendSearchResults.innerHTML = `<div class="friend-row">Sonuç yok</div>`;
+    return;
+  }
+  for (const a of hits.slice(0, 8)) {
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    row.innerHTML = `<span>${a.user}</span><button type="button">Ekle</button>`;
+    row.querySelector("button")!.addEventListener("click", () =>
+      sendFriendRequest(a.user),
+    );
+    friendSearchResults.appendChild(row);
+  }
+}
+
+function refreshFriendsUi() {
+  friendRequestsEl.innerHTML = "";
+  friendListEl.innerHTML = "";
+  if (!currentUser) {
+    friendRequestsEl.innerHTML = `<div class="friend-row">Giriş gerekli</div>`;
+    friendListEl.innerHTML = `<div class="friend-row">—</div>`;
+    return;
+  }
+  const me = getAccount(currentUser);
+  if (!me) return;
+  if (!me.incoming.length) {
+    friendRequestsEl.innerHTML = `<div class="friend-row">İstek yok</div>`;
+  }
+  for (const from of me.incoming) {
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    row.innerHTML = `<span>${from}</span><button type="button" class="ok">Kabul</button><button type="button" class="no">Red</button>`;
+    row.querySelector(".ok")!.addEventListener("click", () => acceptFriend(from));
+    row.querySelector(".no")!.addEventListener("click", () => rejectFriend(from));
+    friendRequestsEl.appendChild(row);
+  }
+  if (!me.friends.length) {
+    friendListEl.innerHTML = `<div class="friend-row">Henüz arkadaş yok</div>`;
+  }
+  for (const f of me.friends) {
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    row.innerHTML = `<span>${f}</span>`;
+    friendListEl.appendChild(row);
+  }
+  refreshLobbyUi();
+}
+
+function refreshLobbyUi() {
+  lobbyInvites.innerHTML = lobbyInvited.length
+    ? lobbyInvited.map((n) => `<span class="invite-chip">${n}</span>`).join("")
+    : `<span class="invite-chip muted">Davet yok · bot doldurulur</span>`;
+  lobbyFriendPick.innerHTML = "";
+  if (!currentUser) return;
+  const me = getAccount(currentUser);
+  if (!me) return;
+  for (const f of me.friends) {
+    const on = lobbyInvited.includes(f);
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    row.innerHTML = `<span>${f}</span><button type="button">${on ? "Çıkar" : "Davet"}</button>`;
+    row.querySelector("button")!.addEventListener("click", () => {
+      if (on) lobbyInvited = lobbyInvited.filter((x) => x !== f);
+      else if (lobbyInvited.length < 3) lobbyInvited.push(f);
+      else showHint("Max +3 davet");
+      refreshLobbyUi();
+    });
+    lobbyFriendPick.appendChild(row);
+  }
+  document.querySelector("#btn-mode-peaceful")!.classList.toggle(
+    "active",
+    lobbyModePick === "peaceful",
+  );
+  document.querySelector("#btn-mode-survivor")!.classList.toggle(
+    "active",
+    lobbyModePick === "survivor",
+  );
+}
+
+function botNamePool(): string[] {
+  return [
+    "ShadowFox",
+    "NeonKid",
+    "BarRat",
+    "IronToe",
+    "PixelDuck",
+    "LavaJay",
+    "MistOwl",
+    "CoinGoblin",
+  ];
+}
+
+function closeRoomChannel() {
+  try {
+    roomChannel?.close();
+  } catch {
+    /* ignore */
+  }
+  roomChannel = null;
+}
+
+function openRoomChannel(code: string) {
+  closeRoomChannel();
+  roomCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  if (!roomCode) {
+    roomStatus.textContent = "Geçerli kod gir";
+    return false;
+  }
+  try {
+    roomChannel = new BroadcastChannel(`wtm_room_${roomCode}`);
+  } catch {
+    roomStatus.textContent = "Bu tarayıcı oda desteklemiyor";
+    return false;
+  }
+  roomChannel.onmessage = (ev) => {
+    const msg = ev.data as {
+      type: string;
+      from?: string;
+      mode?: "peaceful" | "survivor";
+      guests?: string[];
+      peer?: Partial<MpPeer> & { name: string };
+    };
+    if (!msg || msg.from === currentUser) return;
+    if (msg.type === "hello" && roomRole === "host" && msg.from) {
+      remoteHumanNames.add(msg.from);
+      roomStatus.textContent = `Oda ${roomCode} · katılan: ${[...remoteHumanNames].join(", ") || "—"}`;
+      roomChannel?.postMessage({
+        type: "welcome",
+        from: currentUser,
+        peers: [...remoteHumanNames, currentUser],
+      });
+    }
+    if (msg.type === "welcome" && roomRole === "guest") {
+      roomStatus.textContent = `Odaya girildi: ${roomCode}`;
+    }
+    if (msg.type === "start" && roomRole === "guest" && msg.mode) {
+      playMode = msg.mode;
+      lobbyModePick = msg.mode;
+      const guests = (msg.guests || []).filter((g) => g !== currentUser);
+      // ensure host name appears as peer
+      if (msg.from && !guests.includes(msg.from) && msg.from !== currentUser) {
+        guests.unshift(msg.from);
+      }
+      closeLobby();
+      startGameWithMode(playMode, guests.slice(0, 3));
+      // mark remote humans
+      for (const p of mpPeers) {
+        if (!p.isLocal && remoteHumanNames.has(p.name)) p.isBot = false;
+        if (!p.isLocal && p.name === msg.from) p.isBot = false;
+      }
+    }
+    if (msg.type === "state" && msg.peer && playMode !== "solo") {
+      const p = mpPeers.find((x) => x.name === msg.peer!.name && !x.isLocal);
+      if (!p) return;
+      p.isBot = false;
+      Object.assign(p, {
+        x: msg.peer.x ?? p.x,
+        y: msg.peer.y ?? p.y,
+        vx: msg.peer.vx ?? p.vx,
+        vy: msg.peer.vy ?? p.vy,
+        hp: msg.peer.hp ?? p.hp,
+        facing: msg.peer.facing ?? p.facing,
+        alive: msg.peer.alive ?? p.alive,
+        invuln: msg.peer.invuln ?? p.invuln,
+      });
+    }
+    if (msg.type === "dead" && msg.from) {
+      const p = mpPeers.find((x) => x.name === msg.from);
+      if (p) {
+        p.alive = false;
+        p.hp = 0;
+        checkMpRoundEnd();
+      }
+    }
+  };
+  roomStatus.textContent = `Oda ${roomCode} hazır (${roomRole})`;
+  roomCodeInput.value = roomCode;
+  return true;
+}
+
+function hostRoom() {
+  if (!currentUser) {
+    showHint("Önce giriş yap");
+    return;
+  }
+  roomRole = "host";
+  remoteHumanNames.clear();
+  const code =
+    roomCodeInput.value.trim() ||
+    `W${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  if (!openRoomChannel(code)) return;
+  roomChannel?.postMessage({ type: "hosting", from: currentUser });
+  showHint(`Oda kuruldu: ${roomCode} — arkadaşın KATIL desin`);
+}
+
+function joinRoom() {
+  if (!currentUser) {
+    showHint("Önce giriş yap");
+    return;
+  }
+  roomRole = "guest";
+  remoteHumanNames.clear();
+  const code = roomCodeInput.value.trim();
+  if (!code) {
+    roomStatus.textContent = "Kod yaz";
+    return;
+  }
+  if (!openRoomChannel(code)) return;
+  roomChannel?.postMessage({ type: "hello", from: currentUser });
+  showHint(`Katılma isteği: ${roomCode}`);
+}
+
+function broadcastLocalState() {
+  if (!roomChannel || playMode === "solo" || !currentUser) return;
+  roomChannel.postMessage({
+    type: "state",
+    from: currentUser,
+    peer: {
+      name: currentUser,
+      x: player.x,
+      y: player.y,
+      vx: player.vx,
+      vy: player.vy,
+      hp: player.hp,
+      facing,
+      alive: state === "playing" && player.hp > 0,
+      invuln,
+    },
+  });
+}
+
+function startLobbyMatch() {
+  if (!currentUser) {
+    showHint("Önce giriş yap");
+    return;
+  }
+  if (roomRole === "guest") {
+    showHint("Misafirsin — host LOBİYİ BAŞLAT basmalı");
+    return;
+  }
+  playMode = lobbyModePick;
+  // prefer real room joiners, then invited friends, then bots
+  const humans = [...remoteHumanNames].filter((n) => n !== currentUser);
+  for (const n of lobbyInvited) {
+    if (!humans.includes(n) && humans.length < 3) humans.push(n);
+  }
+  const guests =
+    humans.length >= 3 ? humans.slice(0, 3) : fillLobbyRosterFrom(humans);
+  closeLobby();
+  if (roomChannel && roomCode) {
+    roomChannel.postMessage({
+      type: "start",
+      from: currentUser,
+      mode: playMode,
+      guests: [currentUser, ...guests],
+    });
+  }
+  startGameWithMode(playMode, guests);
+  for (const p of mpPeers) {
+    if (!p.isLocal && remoteHumanNames.has(p.name)) p.isBot = false;
+  }
+}
+
+function fillLobbyRosterFrom(preferred: string[]): string[] {
+  const names = [...preferred];
+  const pool = botNamePool().filter(
+    (n) => !names.includes(n) && n !== currentUser,
+  );
+  while (names.length < 3) {
+    names.push(pool.shift() || `Bot${names.length + 1}`);
+  }
+  return names.slice(0, 3);
+}
+function startGameWithMode(mode: PlayMode, guests: string[] = []) {
+  ensureAudio();
+  playMode = mode;
+  survivorSettled = false;
+  returningToHub = false;
+  spectateTarget = null;
+  spectateBanner.hidden = true;
+  titleEl.classList.add("hidden");
+  wrap.classList.add("playing");
+  hideOverlay();
+  resetGame();
+  setupMultiplayer(guests);
+  updateModeTag();
+  state = dialogQueue.length ? "dialog" : "playing";
+  if (state === "dialog") showDialogLine();
+}
+
+function updateModeTag() {
+  if (playMode === "solo") {
+    modeTag.textContent = "";
+    modeTag.dataset.mode = "";
+  } else if (playMode === "peaceful") {
+    modeTag.textContent = "PEACEFUL · PvP YOK · 12 BAR";
+    modeTag.dataset.mode = "peaceful";
+  } else {
+    modeTag.textContent = "SURVIVOR · PvP · SON KALAN";
+    modeTag.dataset.mode = "survivor";
+  }
+}
+
+function setupMultiplayer(guests: string[]) {
+  mpPeers.length = 0;
+  if (playMode === "solo") return;
+  const palette = ["#7ab0ff", "#ff7ad9", "#7dffb3", "#f5c518"];
+  mpPeers.push({
+    name: currentUser || "Sen",
+    isLocal: true,
+    isBot: false,
+    x: player.x,
+    y: player.y,
+    w: player.w,
+    h: player.h,
+    vx: 0,
+    vy: 0,
+    hp: player.hp,
+    maxHp: player.maxHp,
+    facing: 1,
+    alive: true,
+    invuln: 0,
+    attackCd: 0,
+    onGround: true,
+    color: palette[0]!,
+  });
+  guests.forEach((name, i) => {
+    mpPeers.push({
+      name,
+      isLocal: false,
+      isBot: true,
+      x: player.x + 40 + i * 36,
+      y: player.y,
+      w: 30,
+      h: 52,
+      vx: 0,
+      vy: 0,
+      hp: PLAYER_MAX_HP,
+      maxHp: PLAYER_MAX_HP,
+      facing: 1,
+      alive: true,
+      invuln: 0,
+      attackCd: 0,
+      onGround: true,
+      color: palette[(i + 1) % palette.length]!,
+    });
+  });
+}
+
+function syncLocalPeer() {
+  const local = mpPeers.find((p) => p.isLocal);
+  if (!local) return;
+  local.x = player.x;
+  local.y = player.y;
+  local.vx = player.vx;
+  local.vy = player.vy;
+  local.hp = player.hp;
+  local.facing = facing;
+  local.alive = player.hp > 0 && state !== "spectate";
+  local.invuln = invuln;
+}
+
+function alivePeers() {
+  return mpPeers.filter((p) => p.alive);
+}
+
+function returnToHub(msg?: string) {
+  if (returningToHub) return;
+  returningToHub = true;
+  playMode = "solo";
+  mpPeers.length = 0;
+  // keep room channel so rematch possible; clear match flags
+  spectateTarget = null;
+  spectateBanner.hidden = true;
+  state = "title";
+  wrap.classList.remove("playing");
+  titleEl.classList.remove("hidden");
+  hideOverlay();
+  saveProgress();
+  refreshFriendsUi();
+  refreshTitleWallet();
+  drawProfileFace();
+  updateModeTag();
+  if (msg) showHint(msg);
+  returningToHub = false;
+}
+
+function enterSpectate(reason: string) {
+  state = "spectate";
+  player.hp = 0;
+  spectateBanner.hidden = false;
+  spectateBanner.textContent = `İZLEME MODU — ${reason}`;
+  if (roomChannel && currentUser) {
+    roomChannel.postMessage({ type: "dead", from: currentUser });
+  }
+  const others = alivePeers().filter((p) => !p.isLocal);
+  spectateTarget = others[0]?.name ?? null;
+  hideOverlay();
+  checkMpRoundEnd();
+}
+
+function checkMpRoundEnd() {
+  if (playMode === "solo" || survivorSettled) return;
+  const alive = alivePeers();
+  if (alive.length === 0) {
+    returnToHub("Herkes öldü — lobiye dönüş");
+    return;
+  }
+  if (playMode === "survivor" && alive.length === 1) {
+    survivorSettled = true;
+    const winner = alive[0]!;
+    for (const p of mpPeers) {
+      if (p.name === winner.name) {
+        if (p.isLocal) addCoins(5);
+      } else if (p.isLocal) {
+        addCoins(-2);
+      }
+    }
+    const msg = winner.isLocal
+      ? "SURVIVOR kazandın! +5 coin"
+      : `Kazanan: ${winner.name} · sen -2 coin`;
+    showStory(msg);
+    setTimeout(() => returnToHub(msg), 2200);
+  }
+}
+
+function hurtPeer(p: MpPeer, raw: number, knock: number) {
+  if (!p.alive || p.invuln > 0) return;
+  p.hp -= Math.max(1, Math.round(raw));
+  p.invuln = 0.7;
+  p.vx = knock;
+  p.vy = -220;
+  burst(p.x + p.w / 2, p.y + p.h / 2, "#ff6b6b", 8);
+  if (p.hp <= 0) {
+    p.alive = false;
+    p.hp = 0;
+    burst(p.x + p.w / 2, p.y + p.h / 2, "#fff", 16);
+    if (p.isLocal) enterSpectate("öldün · diğerlerini izle");
+    else showHint(`${p.name} düştü`);
+    checkMpRoundEnd();
+  }
+}
+
+function tryPvpAttack() {
+  if (playMode !== "survivor" || state !== "playing") return;
+  const box = attackBox();
+  if (!box) return;
+  for (const p of mpPeers) {
+    if (p.isLocal || !p.alive) continue;
+    if (aabb(box, p)) {
+      hurtPeer(p, 55 + WEAPON_BASE[equippedWeapon()] * 0.15, facing * 220);
+    }
+  }
+}
+
+function updateBots(dt: number) {
+  if (playMode === "solo") return;
+  syncLocalPeer();
+  roomSyncAcc += dt;
+  if (roomSyncAcc >= 0.1) {
+    roomSyncAcc = 0;
+    broadcastLocalState();
+  }
+  for (const p of mpPeers) {
+    if (!p.alive) continue;
+    p.invuln = Math.max(0, p.invuln - dt);
+    p.attackCd = Math.max(0, p.attackCd - dt);
+    if (p.isLocal) continue;
+    if (!p.isBot) continue; // remote human — driven by room sync
+
+    // simple physics
+    p.vy += GRAVITY * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (p.y + p.h >= GROUND_Y) {
+      p.y = GROUND_Y - p.h;
+      p.vy = 0;
+      p.onGround = true;
+    } else p.onGround = false;
+    p.x = Math.max(40, Math.min(WORLD_W - 60, p.x));
+
+    let targetX = player.x;
+    if (playMode === "survivor") {
+      // hunt nearest living non-self
+      let best: MpPeer | null = null;
+      let bestD = Infinity;
+      for (const o of mpPeers) {
+        if (o === p || !o.alive) continue;
+        const d = Math.abs(o.x - p.x);
+        if (d < bestD) {
+          bestD = d;
+          best = o;
+        }
+      }
+      // also pressure toward local player
+      if (best) targetX = best.x;
+    } else {
+      // peaceful: chase nearest enemy
+      let bestE: Enemy | null = null;
+      let bestD = Infinity;
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const d = Math.abs(e.x - p.x);
+        if (d < bestD) {
+          bestD = d;
+          bestE = e;
+        }
+      }
+      if (bestE) targetX = bestE.x;
+      else targetX = player.x;
+    }
+
+    const dx = targetX - p.x;
+    p.facing = dx >= 0 ? 1 : -1;
+    p.vx = Math.sign(dx) * MOVE * 0.72;
+    if (Math.abs(dx) < 40) p.vx *= 0.2;
+    if (p.onGround && Math.random() < 0.008) p.vy = -JUMP * 0.85;
+
+    // attack enemies
+    if (p.attackCd <= 0) {
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        if (Math.abs(e.x - p.x) < 42 && Math.abs(e.y - p.y) < 40) {
+          damageEnemy(e, 40, p.x);
+          p.attackCd = 0.45;
+          break;
+        }
+      }
+    }
+    // survivor PvP vs local / others
+    if (playMode === "survivor" && p.attackCd <= 0) {
+      for (const o of mpPeers) {
+        if (o === p || !o.alive) continue;
+        if (Math.abs(o.x - p.x) < 38 && Math.abs(o.y - p.y) < 40) {
+          if (o.isLocal) hurtPlayer(45, p.facing * 200);
+          else hurtPeer(o, 45, p.facing * 200);
+          p.attackCd = 0.55;
+          break;
+        }
+      }
+    }
+  }
+
+  // camera follow spectate
+  if (state === "spectate") {
+    const t =
+      mpPeers.find((p) => p.name === spectateTarget && p.alive) ||
+      alivePeers()[0];
+    if (t) {
+      camX = t.x + t.w / 2 - W * 0.35;
+      camX = Math.max(0, Math.min(camX, WORLD_W - W));
+    }
+  }
+}
+
+function drawMpPeers() {
+  for (const p of mpPeers) {
+    if (p.isLocal || !p.alive) continue;
+    const x = p.x - camX;
+    const y = p.y;
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(x + 15, y + p.h + 2, 13, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = p.color;
+    ctx.fillRect(x + 5, y + 14, 20, 30);
+    ctx.fillStyle = "#e8b896";
+    ctx.fillRect(x + 8, y + 2, 14, 13);
+    ctx.fillStyle = "#1a1a22";
+    ctx.fillRect(x + 10, y + 7, 3, 3);
+    ctx.fillRect(x + 16, y + 7, 3, 3);
+    ctx.fillStyle = p.color;
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(p.name, x + 15, y - 6);
+    ctx.textAlign = "left";
+    // hp pip
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(x, y - 12, 30, 4);
+    ctx.fillStyle = "#e04040";
+    ctx.fillRect(x, y - 12, 30 * (p.hp / p.maxHp), 4);
+  }
+}
+
+function drawProfileFace() {
+  const c = profileFace.getContext("2d")!;
+  const w = profileFace.width;
+  const h = profileFace.height;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = "#121a2c";
+  c.fillRect(0, 0, w, h);
+  const look = resolveLook();
+  const s = w / 72;
+  c.save();
+  c.scale(s, s);
+  // head (drawn in 72x72 space, scaled up)
+  c.fillStyle = look.skin;
+  c.fillRect(22, 18, 28, 28);
+  c.fillStyle = look.helm;
+  c.fillRect(18, 12, 36, 14);
+  c.fillStyle = look.accent;
+  c.fillRect(18, 26, 36, 3);
+  c.fillStyle = "#1a1a22";
+  c.fillRect(28, 30, 5, 5);
+  c.fillRect(40, 30, 5, 5);
+  // shoulders hint so profile feels like character
+  c.fillStyle = look.body;
+  c.fillRect(16, 48, 40, 18);
+  c.fillStyle = look.accent;
+  c.fillRect(16, 54, 40, 3);
+  applyCosmeticOverlays(c, 21, 16, 1, true);
+  c.restore();
+  c.strokeStyle = "#3d5a80";
+  c.lineWidth = 3;
+  c.strokeRect(1, 1, w - 2, h - 2);
+}
+
+function resolveLook() {
+  const look = { ...DEFAULT_LOOK };
+  const body = equippedCosmetics.body;
+  const pants = equippedCosmetics.pants;
+  const boots = equippedCosmetics.boots;
+  const helm = equippedCosmetics.helm;
+  const skin = equippedCosmetics.skin;
+  if (body === "elec_tshirt") {
+    look.body = COSMETICS.elec_tshirt.colors.body!;
+    look.accent = COSMETICS.elec_tshirt.colors.accent!;
+  } else if (body === "google_hoodie") {
+    look.body = COSMETICS.google_hoodie.colors.body!;
+    look.accent = COSMETICS.google_hoodie.colors.y!;
+  } else if (body === "diamond_chest") {
+    look.body = COSMETICS.diamond_chest.colors.body!;
+    look.accent = COSMETICS.diamond_chest.colors.shine!;
+  } else if (body === "rainbow_tux") {
+    look.body = COSMETICS.rainbow_tux.colors.d!;
+    look.accent = COSMETICS.rainbow_tux.colors.a!;
+  }
+  if (pants === "ig_pants") look.pants = COSMETICS.ig_pants.colors.b!;
+  else if (pants === "metal_armor_pants")
+    look.pants = COSMETICS.metal_armor_pants.colors.pants!;
+  if (boots === "grey_shoes") look.boots = COSMETICS.grey_shoes.colors.boots!;
+  else if (boots === "twitch_shoes")
+    look.boots = COSMETICS.twitch_shoes.colors.boots!;
+  else if (boots === "gold_armor_boots")
+    look.boots = COSMETICS.gold_armor_boots.colors.boots!;
+  if (helm === "pink_heart_crown")
+    look.helm = COSMETICS.pink_heart_crown.colors.crown!;
+  else if (helm === "elec_poop") look.helm = COSMETICS.elec_poop.colors.brown!;
+  else if (helm === "obsidian_helm")
+    look.helm = COSMETICS.obsidian_helm.colors.helm!;
+  if (skin === "youtube_skin") look.skin = COSMETICS.youtube_skin.colors.skin!;
+  else if (skin === "rainbow_skin")
+    look.skin = COSMETICS.rainbow_skin.colors.a!;
+  if (equippedCosmetics.cape === "elec_tattoo")
+    look.cape = COSMETICS.elec_tattoo.colors.ink!;
+  return look;
+}
+
+function applyCosmeticOverlays(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  facingDir: 1 | -1,
+  faceOnly = false,
+) {
+  const t = typeof time === "number" ? time : 0;
+  const face = equippedCosmetics.face;
+  const helm = equippedCosmetics.helm;
+  const hands = equippedCosmetics.hands;
+  const held = equippedCosmetics.held;
+  const body = equippedCosmetics.body;
+
+  if (face === "blue_laser_glasses") {
+    c.fillStyle = "#0a1a30";
+    c.fillRect(x + 8, y + 6, 14, 5);
+    c.fillStyle = "#3a90ff";
+    c.fillRect(x + 9, y + 7, 5, 3);
+    c.fillRect(x + 16, y + 7, 5, 3);
+    c.fillStyle = `rgba(106,176,255,${0.4 + Math.sin(t * 10) * 0.3})`;
+    c.fillRect(x + (facingDir > 0 ? 22 : -10), y + 8, 12, 2);
+  }
+  if (face === "red_bowtie") {
+    c.fillStyle = "#e04040";
+    c.beginPath();
+    c.moveTo(x + 15, y + 14);
+    c.lineTo(x + 8, y + 18);
+    c.lineTo(x + 15, y + 17);
+    c.lineTo(x + 22, y + 18);
+    c.closePath();
+    c.fill();
+  }
+  if (helm === "elec_poop") {
+    c.fillStyle = "#6a4020";
+    c.beginPath();
+    c.ellipse(x + 15, y - 6, 8, 6, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = `rgba(74,168,255,${0.5 + Math.sin(t * 8) * 0.3})`;
+    c.fillRect(x + 12, y - 10, 6, 3);
+  }
+  if (helm === "pink_heart_crown") {
+    c.fillStyle = "#ff7ad9";
+    c.fillRect(x + 6, y - 6, 18, 6);
+    c.fillStyle = "#ff3a8a";
+    c.beginPath();
+    c.moveTo(x + 15, y - 14);
+    c.lineTo(x + 10, y - 8);
+    c.lineTo(x + 20, y - 8);
+    c.fill();
+  }
+  if (helm === "obsidian_helm") {
+    c.fillStyle = "#1a1020";
+    c.fillRect(x + 5, y - 4, 20, 14);
+    c.fillStyle = helmOpen ? "#4a2060" : "#1a1020";
+    c.fillRect(x + 8, y + 2, 14, 5);
+    if (Math.floor(t * 2) % 6 === 0) helmOpen = !helmOpen;
+  }
+  if (faceOnly) return;
+
+  if (body === "google_hoodie") {
+    const cols = ["#ea4335", "#fbbc05", "#34a853", "#4285f4"];
+    for (let i = 0; i < 4; i++) {
+      c.fillStyle = cols[i]!;
+      c.fillRect(x + 8 + i * 4, y + 16, 3, 3);
+    }
+  }
+  if (body === "elec_tshirt") {
+    c.fillStyle = `rgba(74,168,255,${0.45 + Math.sin(t * 8) * 0.35})`;
+    c.fillRect(x + 7, y + 18, 16, 2);
+  }
+  if (body === "rainbow_tux") {
+    const cols = ["#ff3a3a", "#fbbc05", "#34a853", "#4285f4", "#9146ff"];
+    for (let i = 0; i < 5; i++) {
+      c.fillStyle = cols[i]!;
+      c.fillRect(x + 5 + i * 4, y + 14, 4, 18);
+    }
+  }
+  if (body === "diamond_chest") {
+    c.fillStyle = "#e8f6ff";
+    c.fillRect(x + 12, y + 18, 6, 6);
+  }
+  if (equippedCosmetics.pants === "ig_pants") {
+    const cols = ["#f58529", "#dd2a7b", "#8134af", "#515bd4"];
+    for (let i = 0; i < 4; i++) {
+      c.fillStyle = cols[i]!;
+      c.fillRect(x + 7, y + 30 + i * 3, 16, 3);
+    }
+  }
+  if (hands === "emerald_gloves") {
+    c.fillStyle = "#2ecc71";
+    c.fillRect(x + 2, y + 22, 6, 8);
+    c.fillRect(x + 22, y + 22, 6, 8);
+  }
+  if (held === "slot_token") {
+    c.fillStyle = "#f5c518";
+    c.beginPath();
+    c.arc(x + (facingDir > 0 ? 28 : 2), y + 24, 6, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#111";
+    c.font = "8px sans-serif";
+    c.fillText("7", x + (facingDir > 0 ? 25 : -1), y + 27);
+  }
+  if (equippedCosmetics.boots === "twitch_shoes") {
+    c.fillStyle = "#fff";
+    c.fillRect(x + 7, y + 46, 4, 3);
+    c.fillRect(x + 19, y + 46, 4, 3);
+  }
+}
+
 function aabb(a: Rect, b: Rect) {
   return (
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
@@ -565,7 +1603,7 @@ function weaponDamage(id: WeaponId) {
 }
 
 function itemShortLabel(it: InvItem | null): string {
-  if (!it) return "—";
+    if (!it) return "—";
   if (it.kind === "weapon") {
     const base = WEAPONS[it.id].label;
     if (it.id === "rifle") return `${base} ${it.ammo ?? 0}`;
@@ -779,7 +1817,7 @@ function swapBagSlot(index: number) {
       bag[index] = hand;
       showHint(
         hand
-                  ? `Sağ el ↔ çanta ${index + 1}`
+          ? `Sağ el ↔ çanta ${index + 1}`
           : `${POTIONS[slotItem.id].label} sağ ele`,
       );
     }
@@ -1014,7 +2052,9 @@ function buildWorld() {
   levelClearPending = false;
 
   // Longer maps so boss is farther / run lasts more
-  WORLD_W = 4200 + level * 260;
+  // Multiplayer modes: 12 bars (6x normal density) + wider map
+  const mpBars = playMode !== "solo";
+  WORLD_W = mpBars ? 7200 + level * 320 : 4200 + level * 260;
   const houseX = level % 2 === 1 ? Math.floor(WORLD_W * 0.12) : null;
   const barX = Math.floor(WORLD_W * 0.32);
 
@@ -1069,27 +2109,34 @@ function buildWorld() {
     });
   }
 
-  buildings.push({
-    x: barX,
-    y: GROUND_Y - 120,
-    w: 140,
-    h: 120,
-    kind: "bar",
-    label: "BAR",
-  });
-  doors.push({
-    x: barX + 50,
-    y: GROUND_Y - 56,
-    w: 40,
-    h: 56,
-    id: "d-bar",
-    label: "Bar",
-    target: "interior",
-    interiorId: "bar1",
-    needsKey: true,
-  });
+  const barCount = mpBars ? 12 : 1;
+  for (let bi = 0; bi < barCount; bi++) {
+    const bx =
+      barCount === 1
+        ? barX
+        : Math.floor(220 + (bi / Math.max(1, barCount - 1)) * (WORLD_W - 900));
+    buildings.push({
+      x: bx,
+      y: GROUND_Y - 120,
+      w: 140,
+      h: 120,
+      kind: "bar",
+      label: barCount > 1 ? `BAR ${bi + 1}` : "BAR",
+    });
+    doors.push({
+      x: bx + 50,
+      y: GROUND_Y - 56,
+      w: 40,
+      h: 56,
+      id: `d-bar-${bi}`,
+      label: barCount > 1 ? `Bar ${bi + 1}` : "Bar",
+      target: "interior",
+      interiorId: "bar1",
+      needsKey: true,
+    });
+  }
 
-  const count = Math.min(16, 6 + level * 2);
+  const count = Math.min(mpBars ? 28 : 16, (mpBars ? 12 : 6) + level * 2);
   const kinds: Array<Exclude<EnemyKind, "boss">> = ["goblin", "bruiser", "bat"];
   for (let i = 0; i < count; i++) {
     const t = (i + 1) / (count + 1);
@@ -1101,8 +2148,7 @@ function buildWorld() {
     else if (kind === "bruiser") addEnemy("bruiser", x, GROUND_Y - 50, 100);
     else addEnemy("goblin", x, GROUND_Y - 44, 90);
   }
-
-  addBoss(WORLD_W - 480);
+    addBoss(WORLD_W - 480);
   addItem("coin", airPlats[1]!.x + 30, airPlats[1]!.y - 28);
   addItem("coin", airPlats[4]!.x + 20, airPlats[4]!.y - 28);
   addItem("coin", airPlats[8]!.x + 24, airPlats[8]!.y - 28);
@@ -1175,7 +2221,7 @@ function updateHud() {
     else zoneName.textContent = `Seviye ${level}`;
   }
 
-  coinCount.textContent = String(inventory.coins);
+  coinCount.textContent = `${inventory.coins} ($${dollarsFromCoins(inventory.coins)})`;
   keySlot.classList.toggle("owned", inventory.key);
   medalSlot.classList.toggle("owned", inventory.medallion);
 
@@ -1242,8 +2288,13 @@ function hurtPlayer(rawDmg: number, knock: number) {
   burst(player.x + player.w / 2, player.y + player.h / 2, "#ff6b6b", 12);
   updateHud();
   if (player.hp <= 0) {
-    state = "dead";
-    showOverlay("DÜŞTÜN", "R veya Yeniden ile tekrar dene.");
+    saveProgress();
+    if (playMode !== "solo") {
+      enterSpectate("öldün · diğerlerini izle");
+    } else {
+      state = "dead";
+      showOverlay("DÜŞTÜN", "R veya Yeniden ile tekrar dene. Coin ve kıyafetler güvende.");
+    }
   }
 }
 
@@ -1560,7 +2611,7 @@ function onBottleLand(b: ThrownBottle) {
           color: "#b44dff",
           size: 2 + Math.random() * 3,
         });
-              }
+      }
     }
   } else if (b.id === "pink") {
     spawnAllies(cx - 20, Math.min(cy, GROUND_Y - 40));
@@ -1622,7 +2673,7 @@ function updatePotionAnims(dt: number) {
     if (Math.random() < 0.35 && drinkAnimId) {
       const c = POTIONS[drinkAnimId].color;
       particles.push({
-        x: player.x + player.w / 2 + facing * 6,
+                x: player.x + player.w / 2 + facing * 6,
         y: player.y + 4,
         vx: (Math.random() - 0.5) * 40,
         vy: -40 - Math.random() * 40,
@@ -1804,10 +2855,14 @@ function tickVenomDot(dt: number) {
     burst(player.x + player.w / 2, player.y + player.h / 2, "#5dff7a", 6);
     updateHud();
     if (player.hp <= 0) {
-      state = "dead";
-      showOverlay("DÜŞTÜN", "R veya Yeniden ile tekrar dene.");
+      saveProgress();
       venomDot = 0;
       venomAcc = 0;
+      if (playMode !== "solo") enterSpectate("öldün · diğerlerini izle");
+      else {
+        state = "dead";
+        showOverlay("DÜŞTÜN", "R veya Yeniden ile tekrar dene. Coin ve kıyafetler güvende.");
+      }
       return;
     }
   }
@@ -2153,7 +3208,7 @@ function updateBoss(e: Enemy, dt: number) {
     } else if (e.phase === 2) {
       e.x += e.vx * dt;
       e.attackCd -= dt;
-      // Horn charge — jumpable (only hits if player low)
+            // Horn charge — jumpable (only hits if player low)
       if (
         aabb(player, { x: e.x, y: e.y + 20, w: e.w, h: e.h - 20 }) &&
         player.y + player.h > e.y + 30
@@ -2341,7 +3396,7 @@ function updateBoss(e: Enemy, dt: number) {
         showHint("Lav yükseliyor! Platforma çık!");
       } else {
         spawnProjectile(
-                    "breath",
+          "breath",
           e.x + e.w / 2,
           e.y + 30,
           e.facing * 260,
@@ -2651,10 +3706,19 @@ function updateEnemies(dt: number) {
       !e.unhittable &&
       aabb(player, e) &&
       invuln <= 0 &&
-      invisTimer <= 0
+      invisTimer <= 0 &&
+      state === "playing"
     ) {
       const knock = player.x < e.x ? -260 : 260;
       hurtPlayer(contactDamage(e), knock);
+    }
+    if (playMode !== "solo" && e.hurt <= 0 && !e.unhittable) {
+      for (const peer of mpPeers) {
+        if (!peer.alive || peer.isLocal || peer.invuln > 0) continue;
+        if (aabb(peer, e)) {
+          hurtPeer(peer, contactDamage(e), peer.x < e.x ? -220 : 220);
+        }
+      }
     }
   }
 
@@ -2665,6 +3729,7 @@ function updateEnemies(dt: number) {
       if (!aabb(box, e)) continue;
       damageEnemy(e, weaponDamage(equippedWeapon()), player.x + player.w / 2);
     }
+    tryPvpAttack();
   }
 }
 
@@ -2679,10 +3744,10 @@ function updateItems(_dt: number) {
       w: it.w,
       h: it.h,
     };
-    if (!aabb(player, body)) continue;
+        if (!aabb(player, body)) continue;
     it.taken = true;
     sfxPickup();
-    if (it.kind === "coin") inventory.coins += 1;
+    if (it.kind === "coin") addCoins(1);
     else if (it.kind === "key") {
       inventory.key = true;
       showStory("Anahtar bulundu. Bar kapısı açılır.");
@@ -2722,7 +3787,7 @@ function updateProjectiles(dt: number) {
     }
 
     if (p.hostile) {
-      if (aabb(player, p) && invuln <= 0) {
+      if (aabb(player, p) && invuln <= 0 && state === "playing") {
         if (p.kind === "venom") {
           applyVenomDot();
           if (p.dmg > 0) hurtPlayer(p.dmg, p.vx > 0 ? 160 : -160);
@@ -2734,6 +3799,16 @@ function updateProjectiles(dt: number) {
         }
         p.alive = false;
       }
+      if (p.alive && playMode !== "solo") {
+        for (const peer of mpPeers) {
+          if (!peer.alive || peer.isLocal || peer.invuln > 0) continue;
+          if (aabb(peer, p)) {
+            hurtPeer(peer, Math.max(1, p.dmg), p.vx > 0 ? 180 : -180);
+            p.alive = false;
+            break;
+          }
+        }
+      }
     } else if (scene === "world") {
       for (const e of enemies) {
         if (!e.alive) continue;
@@ -2741,6 +3816,16 @@ function updateProjectiles(dt: number) {
         damageEnemy(e, p.dmg, p.x);
         p.alive = false;
         break;
+      }
+      if (p.alive && playMode === "survivor") {
+        for (const peer of mpPeers) {
+          if (!peer.alive || peer.isLocal || peer.invuln > 0) continue;
+          if (aabb(peer, p)) {
+            hurtPeer(peer, p.dmg, p.vx > 0 ? 200 : -200);
+            p.alive = false;
+            break;
+          }
+        }
       }
     }
 
@@ -2999,6 +4084,7 @@ function tryAttack() {
 }
 
 function handleInput(dt: number) {
+  if (state === "spectate") return;
   if (lootReveal) {
     const skip =
       keys.has("x") ||
@@ -3122,7 +4208,7 @@ function handleInput(dt: number) {
       showHint("↑ / E — ROCKET RACCOON");
     } else if (player.x < 150) {
       showHint("↑ / E — dışarı çık");
-          }
+    }
   }
 }
 
@@ -3241,7 +4327,6 @@ function drawRocketRaccoon(px: number, py: number, big = false) {
     ctx.fillText("E — bak", px + 18, py + h + 28);
   }
 }
-
 function drawChestVisual(cx: number, cy: number, type: ChestType, opened: boolean) {
   const w = 56;
   const h = 44;
@@ -3701,36 +4786,38 @@ function drawPlayer() {
   ctx.ellipse(x + 15, y + player.h + 2, 13, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // boots / pants / chest / helm tint from armor
-  ctx.fillStyle = armor.boots ? "#8a9098" : "#2a2a32";
+  const cos = resolveLook();
+  ctx.fillStyle = armor.boots ? "#8a9098" : cos.boots;
   ctx.fillRect(x + 5, y + 44, 9, 8);
   ctx.fillRect(x + 17, y + 44, 9, 8);
 
   const legSwing = onGround
     ? Math.sin(time * (Math.abs(player.vx) > 20 ? 14 : 0)) * 3
     : 0;
-  ctx.fillStyle = armor.pants ? "#3a5068" : "#3a4558";
+  ctx.fillStyle = armor.pants ? "#3a5068" : cos.pants;
   ctx.fillRect(x + 7, y + 30, 8, 15 + legSwing);
   ctx.fillRect(x + 16, y + 30, 8, 15 - legSwing);
 
-  ctx.fillStyle = armor.chest ? "#6a7888" : "#5a6578";
+  ctx.fillStyle = armor.chest ? "#6a7888" : cos.body;
   ctx.fillRect(x + 5, y + 14, 20, 18);
-  ctx.fillStyle = "#c9a227";
+  ctx.fillStyle = cos.accent;
   ctx.fillRect(x + 5, y + 20, 20, 3);
 
-  ctx.fillStyle = "#8a2030";
+  ctx.fillStyle = cos.cape;
   ctx.fillRect(x + 2, y + 16, 5, 22);
 
-  ctx.fillStyle = "#e8b896";
+  ctx.fillStyle = cos.skin;
   ctx.fillRect(x + 8, y + 2, 14, 13);
-  ctx.fillStyle = armor.helm ? "#a0a8b0" : "#4a5568";
+  ctx.fillStyle = armor.helm ? "#a0a8b0" : cos.helm;
   ctx.fillRect(x + 6, y - 2, 18, 8);
   ctx.fillRect(x + 10, y - 8, 10, 8);
-  ctx.fillStyle = "#c9a227";
+  ctx.fillStyle = cos.accent;
   ctx.fillRect(x + 6, y + 4, 18, 2);
   ctx.fillStyle = "#1a1a22";
-  ctx.fillRect(x + 10, y + 7, 3, 3);
+    ctx.fillRect(x + 10, y + 7, 3, 3);
   ctx.fillRect(x + 16, y + 7, 3, 3);
+
+  applyCosmeticOverlays(ctx, x, y, facing);
 
   drawHandPotion(x - 2, y + 18);
 
@@ -3903,7 +4990,7 @@ function drawEnemy(e: Enemy) {
       ctx.beginPath();
       ctx.ellipse(x + e.w * 0.35, y + e.h * 0.5, e.w * 0.22, e.h * 0.28, 0, 0, Math.PI * 2);
       ctx.fill();
-            ctx.fillStyle = "#ff3030";
+      ctx.fillStyle = "#ff3030";
       ctx.fillRect(x + 8, y + 14, 5, 5);
       ctx.fillRect(x + 18, y + 14, 5, 5);
       ctx.fillStyle = "#f0e080";
@@ -4151,7 +5238,6 @@ function drawHazards() {
     }
   }
 }
-
 function drawPlatTraps() {
   for (const t of platTraps) {
     const x = t.x - camX;
@@ -4379,10 +5465,10 @@ function resetGame() {
     y: GROUND_Y - 52,
     vx: 0,
     vy: 0,
-    hp: 450,
-    maxHp: 450,
+    hp: PLAYER_MAX_HP,
+    maxHp: PLAYER_MAX_HP,
   });
-  inventory.coins = 0;
+  // coins + costumes persist in localStorage — do not wipe bank
   inventory.key = false;
   inventory.medallion = false;
   leftHand.item = null;
@@ -4455,7 +5541,7 @@ function frame(dt: number) {
       camX = player.x + player.w / 2 - W * 0.35;
       camX = Math.max(0, Math.min(camX, WORLD_W - W));
     } else camX = 0;
-  } else if (state === "playing" || state === "dialog") {
+  } else if (state === "playing" || state === "dialog" || state === "spectate") {
     if (state === "playing") {
       handleInput(dt);
       resolvePlayer(dt);
@@ -4469,17 +5555,30 @@ function frame(dt: number) {
       updateProjectiles(dt);
       updateThrownBottles(dt);
       updatePotionAnims(dt);
+      updateBots(dt);
+    } else if (state === "spectate") {
+      updateEnemies(dt);
+      updateAllies(dt);
+      updateHazards(dt);
+      updatePlatTraps(dt);
+      updateProjectiles(dt);
+      updateThrownBottles(dt);
+      updatePotionAnims(dt);
+      updateBots(dt);
+      checkMpRoundEnd();
     } else {
       handleInput(dt);
     }
     updateParticles(dt);
     invuln = Math.max(0, invuln - dt);
 
-    if (scene === "world") {
-      camX = player.x + player.w / 2 - W * 0.35;
-      camX = Math.max(0, Math.min(camX, WORLD_W - W));
-    } else {
-      camX = 0;
+    if (state !== "spectate") {
+      if (scene === "world") {
+        camX = player.x + player.w / 2 - W * 0.35;
+        camX = Math.max(0, Math.min(camX, WORLD_W - W));
+      } else {
+        camX = 0;
+      }
     }
 
     if (storyTimer > 0) {
@@ -4520,7 +5619,8 @@ function frame(dt: number) {
   drawProjectiles();
   drawThrownBottles();
   drawPotionFx();
-  if (state !== "title") drawPlayer();
+  if (state !== "title" && state !== "spectate") drawPlayer();
+  if (state !== "title") drawMpPeers();
   drawParticles();
   ctx.restore();
   drawLootReveal();
@@ -4541,19 +5641,19 @@ function loop(now: number) {
 }
 
 function startGame() {
-  ensureAudio();
-  titleEl.classList.add("hidden");
-  wrap.classList.add("playing");
-  hideOverlay();
-  resetGame();
-  state = dialogQueue.length ? "dialog" : "playing";
-  if (state === "dialog") showDialogLine();
+  playMode = "solo";
+  startGameWithMode("solo", []);
 }
 
 function restartFromOverlay() {
+  if (playMode !== "solo") {
+    returnToHub();
+    return;
+  }
   ensureAudio();
   hideOverlay();
   resetGame();
+  setupMultiplayer([]);
   state = dialogQueue.length ? "dialog" : "playing";
   if (state === "dialog") showDialogLine();
 }
@@ -4563,6 +5663,10 @@ window.addEventListener("keydown", (e) => {
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key))
     e.preventDefault();
   if (e.key === "r" || e.key === "R") {
+    if (state === "spectate" || (playMode !== "solo" && state === "dead")) {
+      returnToHub();
+      return;
+    }
     if (
       state === "playing" ||
       state === "dead" ||
@@ -4570,7 +5674,9 @@ window.addEventListener("keydown", (e) => {
       state === "dialog"
     ) {
       hideOverlay();
+      playMode = "solo";
       resetGame();
+      setupMultiplayer([]);
       state = dialogQueue.length ? "dialog" : "playing";
       if (state === "dialog") showDialogLine();
     }
@@ -4595,92 +5701,598 @@ document.querySelector("#btn-start")!.addEventListener("click", startGame);
 document
   .querySelector("#btn-restart")!
   .addEventListener("click", restartFromOverlay);
-
-function bindHold(sel: string, key: string) {
-  const el = document.querySelector<HTMLElement>(sel)!;
-  const on = (ev: PointerEvent) => {
-    ev.preventDefault();
-    try {
-      el.setPointerCapture(ev.pointerId);
-    } catch {
-      /* ignore */
+document.querySelector("#btn-shop")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openShop();
+});
+document.querySelector("#btn-shop-open")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openShop();
+});
+document.querySelector("#btn-shop-close")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  closeShop();
+});
+shopPanel.addEventListener("pointerdown", (e) => {
+  if (e.target === shopPanel) closeShop();
+});
+document.querySelector("#btn-lobby")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openLobby();
+});
+document.querySelector("#btn-lobby-close")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  closeLobby();
+});
+lobbyPanel.addEventListener("pointerdown", (e) => {
+  if (e.target === lobbyPanel) closeLobby();
+});
+document.querySelector("#btn-mode-peaceful")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  lobbyModePick = "peaceful";
+  refreshLobbyUi();
+});
+document.querySelector("#btn-mode-survivor")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  lobbyModePick = "survivor";
+  refreshLobbyUi();
+});
+document.querySelector("#btn-lobby-start")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  startLobbyMatch();
+});
+document.querySelector("#btn-room-host")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  hostRoom();
+});
+document.querySelector("#btn-room-join")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  joinRoom();
+});
+document.querySelector("#btn-auth-login")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  loginAccount();
+});
+document.querySelector("#btn-auth-register")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  registerAccount();
+});
+document.querySelector("#btn-friend-search")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  searchFriends();
+});
+friendSearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    searchFriends();
+  }
+});
+function drawPlatTraps() {
+  for (const t of platTraps) {
+    const x = t.x - camX;
+    if (x + t.w < -10 || x > W + 10) continue;
+    ctx.fillStyle = "#4a3030";
+    ctx.fillRect(x, t.y + 8, t.w, 4);
+    ctx.fillStyle = "#c0c8d0";
+    const spikes = 5;
+    for (let i = 0; i < spikes; i++) {
+      const sx = x + 3 + i * ((t.w - 6) / (spikes - 1));
+      ctx.beginPath();
+      ctx.moveTo(sx, t.y + 10);
+      ctx.lineTo(sx + 3, t.y);
+      ctx.lineTo(sx + 6, t.y + 10);
+      ctx.fill();
     }
-    keys.add(key);
-  };
-  const off = (ev: Event) => {
-    ev.preventDefault();
-    keys.delete(key);
-  };
-  el.addEventListener("pointerdown", on);
-  el.addEventListener("pointerup", off);
-  el.addEventListener("pointercancel", off);
-  el.addEventListener("lostpointercapture", off);
+  }
 }
-bindHold("#btn-left", "ArrowLeft");
-bindHold("#btn-right", "ArrowRight");
-bindHold("#btn-jump", " ");
-bindHold("#btn-punch", "x");
-bindHold("#btn-enter", "e");
-bindHold("#btn-bag1", "1");
-bindHold("#btn-bag2", "2");
-bindHold("#btn-bag3", "3");
-document.querySelector("#btn-potion")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  usePotion();
-});
-document.querySelector("#btn-drop")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  if (leftHand.item?.kind === "weapon") dropLeftHand();
-  else dropRightHand();
-});
-document.querySelector("#btn-armor")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  dropArmorPiece();
-});
-dialogEl.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
+
+function drawGroundDrops() {
+  for (const d of groundDrops) {
+    const x = d.x - camX;
+    const y = d.y + Math.sin(d.bob) * 3;
+    if (x < -40 || x > W + 40) continue;
+    if (d.kind === "weapon") {
+      ctx.fillStyle = "#6a4a28";
+      ctx.fillRect(x, y + 6, d.w, 6);
+      ctx.fillStyle = "#c0d0e0";
+      ctx.fillRect(x + 4, y + 2, d.w - 6, 4);
+    } else {
+      ctx.fillStyle = "#708090";
+      ctx.fillRect(x + 2, y, d.w - 4, d.h);
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(x + 4, y + 6, d.w - 8, 3);
+    }
+    if (d.enchanted || d.sparkle > 0) {
+      const pulse = 0.4 + Math.sin(time * 14) * 0.35;
+      ctx.fillStyle = `rgba(180,77,255,${pulse})`;
+      ctx.fillRect(x + 2, y - 4, 3, 3);
+      ctx.fillRect(x + d.w - 6, y + 2, 3, 3);
+      ctx.fillRect(x + d.w / 2, y + d.h, 2, 2);
+    }
+  }
+}
+
+function drawAllies() {
+  for (const a of allies) {
+    if (!a.alive) continue;
+    const x = a.x - camX;
+    const y = a.y;
+    if (x + a.w < -20 || x > W + 20) continue;
+    ctx.fillStyle = "#4a3068";
+    ctx.fillRect(x + 4, y + 14, 14, 16);
+    ctx.fillStyle = "#e8b896";
+    ctx.fillRect(x + 5, y + 2, 12, 12);
+    ctx.fillStyle = "#ff7ad9";
+    ctx.fillRect(x + 4, y, 14, 4);
+    // magic staff
+    const sx = a.facing > 0 ? x + 16 : x - 2;
+    ctx.fillStyle = "#6a4080";
+    ctx.fillRect(sx, y + 4, 3, 26);
+    ctx.fillStyle = "#b44dff";
+    ctx.beginPath();
+    ctx.arc(sx + 1, y + 4, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(180,77,255,${0.4 + Math.sin(time * 10) * 0.3})`;
+    ctx.fillRect(sx - 1, y + 2, 2, 2);
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(x + 2, y - 6, a.w - 4, 3);
+    ctx.fillStyle = "#ff7ad9";
+    ctx.fillRect(x + 2, y - 6, (a.w - 4) * (a.hp / a.maxHp), 3);
+  }
+}
+
+function drawThrownBottles() {
+  for (const b of thrownBottles) {
+    if (!b.alive) continue;
+    const x = b.x - camX;
+    const y = b.y;
+    drawPotionBottle(x + b.w / 2, y + b.h / 2, b.color, 1.15, b.spin);
+    // trail droplets
+    ctx.fillStyle = b.color;
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.arc(x - b.vx * 0.02 + 4, y - b.vy * 0.02 + 4, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPotionFx() {
+  if (pourAnimT > 0) {
+    const x = pourAnimX - camX;
+    const y = pourAnimY;
+    drawPotionBottle(x, y - 30, "#b44dff", 1.25, 0.85);
+    ctx.strokeStyle = `rgba(180,77,255,${0.55 + Math.sin(time * 20) * 0.3})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y - 18);
+    ctx.quadraticCurveTo(
+      x + 4 + Math.sin(time * 28) * 4,
+      y - 8,
+      x + Math.sin(time * 22) * 2,
+      y,
+    );
+    ctx.stroke();
+    ctx.fillStyle = "rgba(180,77,255,0.55)";
+    ctx.beginPath();
+    ctx.arc(x + Math.sin(time * 22) * 2, y + 2, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawProjectiles() {
+  for (const p of projectiles) {
+    if (!p.alive) continue;
+    const x = p.x - camX;
+    if (p.kind === "arrow" || p.kind === "horn") {
+      ctx.fillStyle = "#d0c090";
+      ctx.fillRect(x, p.y + 2, p.w, 3);
+      ctx.fillStyle = "#888";
+      ctx.fillRect(x + (p.vx >= 0 ? p.w - 4 : 0), p.y, 4, 6);
+    } else if (p.kind === "club") {
+      ctx.save();
+      ctx.translate(x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(time * 10 * (p.vx >= 0 ? 1 : -1));
+      ctx.fillStyle = "#6a4020";
+      ctx.fillRect(-3, -8, 6, 16);
+      ctx.fillStyle = "#8a9098";
+      ctx.beginPath();
+      ctx.arc(0, -9, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c0c8d0";
+      ctx.fillRect(-4, -12, 3, 3);
+      ctx.fillRect(1, -11, 3, 3);
+      ctx.restore();
+    } else if (p.kind === "spit") {
+      ctx.fillStyle = "#7dffb3";
+      ctx.beginPath();
+      ctx.arc(x + 5, p.y + 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "rain") {
+      ctx.fillStyle = "#7ab0ff";
+      ctx.fillRect(x + 2, p.y, 4, 12);
+    } else if (p.kind === "poison") {
+      ctx.fillStyle = "#ff3a3a";
+      ctx.beginPath();
+      ctx.arc(x + 7, p.y + 5, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "bullet") {
+      ctx.fillStyle = "#f5c518";
+      ctx.fillRect(x, p.y + 1, p.w, 4);
+    } else if (p.kind === "fire" || p.kind === "breath") {
+      ctx.fillStyle = "#ff5020";
+      ctx.beginPath();
+      ctx.arc(x + 8, p.y + 6, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffd24a";
+      ctx.beginPath();
+      ctx.arc(x + 8, p.y + 6, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "magic" || p.kind === "bolt") {
+      ctx.fillStyle = "#b44dff";
+      ctx.beginPath();
+      ctx.arc(x + 7, p.y + 7, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x + 5, p.y + 4, 4, 6);
+    } else if (p.kind === "cotton") {
+      ctx.fillStyle = "#f4f0e8";
+      ctx.beginPath();
+      ctx.arc(x + 6, p.y + 6, 7, 0, Math.PI * 2);
+      ctx.arc(x + 12, p.y + 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.kind === "blade") {
+      ctx.fillStyle = "#c0d0e0";
+      ctx.save();
+      ctx.translate(x + 9, p.y + 9);
+      ctx.rotate(time * 18);
+      ctx.fillRect(-10, -2, 20, 4);
+      ctx.fillRect(-2, -10, 4, 20);
+      ctx.restore();
+    } else if (p.kind === "head") {
+      ctx.fillStyle = "#3a5030";
+      ctx.fillRect(x, p.y, p.w, p.h);
+      ctx.fillStyle = "#80ff60";
+      ctx.fillRect(x + 4, p.y + 6, 4, 4);
+      ctx.fillRect(x + 12, p.y + 6, 4, 4);
+    } else if (p.kind === "spike") {
+      ctx.fillStyle = "#c9a060";
+      ctx.beginPath();
+      ctx.moveTo(x + 5, p.y);
+      ctx.lineTo(x + 10, p.y + p.h);
+      ctx.lineTo(x, p.y + p.h);
+      ctx.fill();
+    } else if (p.kind === "anvil") {
+      ctx.fillStyle = "#4a4a50";
+      ctx.fillRect(x, p.y + 8, p.w, p.h - 8);
+      ctx.fillRect(x + 4, p.y, p.w - 8, 10);
+    } else if (p.kind === "spark") {
+      ctx.fillStyle = "#ffd24a";
+      ctx.fillRect(x, p.y, 4, 4);
+    } else {
+      ctx.fillStyle = "#5dff7a";
+      ctx.beginPath();
+      ctx.arc(x + 6, p.y + 6, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life * 2);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - camX, p.y, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function resetGame() {
+  level = 1;
+  Object.assign(player, {
+    x: 80,
+    y: GROUND_Y - 52,
+    vx: 0,
+    vy: 0,
+    hp: PLAYER_MAX_HP,
+    maxHp: PLAYER_MAX_HP,
+  });
+  // coins + costumes persist in localStorage — do not wipe bank
+  inventory.key = false;
+  inventory.medallion = false;
+  leftHand.item = null;
+  rightHand.item = null;
+  bag[0] = null;
+  bag[1] = null;
+  bag[2] = null;
+  armor.helm = false;
+  armor.chest = false;
+  armor.pants = false;
+  armor.boots = false;
+  for (const k of Object.keys(weaponBonus) as WeaponId[]) weaponBonus[k] = 0;
+  for (const k of Object.keys(weaponEnchanted) as WeaponId[])
+    weaponEnchanted[k] = false;
+  for (const k of Object.keys(armorEnchant) as ArmorSlot[]) armorEnchant[k] = 0;
+  facing = 1;
+  invuln = 0;
+  attackT = 0;
+  attackCd = 0;
+  flyTimer = 0;
+  invisTimer = 0;
+  shieldHp = 0;
+  shieldTimer = 0;
+  venomDot = 0;
+  venomAcc = 0;
+  enchantSparkleT = 0;
+  drinkAnimT = 0;
+  drinkAnimId = null;
+  pourAnimT = 0;
+  potionBusy = false;
+  lootReveal = null;
+  houseRocketShown = false;
+  barChestSave = null;
+  projectiles.length = 0;
+  hazards.length = 0;
+  platTraps.length = 0;
+  groundDrops.length = 0;
+  allies.length = 0;
+  thrownBottles.length = 0;
+  camX = 0;
+  scene = "world";
+  currentInterior = null;
+  chest = null;
+  dialogQueue = [];
+  dialogEl.classList.remove("show");
+  buildWorld();
+  updateHud();
+  queueDialog([
+    {
+      name: "???",
+      text: "İçilen: Pigeon / TheReeker / Recovery. Atılan: Krypton. Yere atılan: Enchant / Splındog.",
+    },
+    { name: "SEN", text: "Kardeşimi bulacağım." },
+    {
+      name: "???",
+      text: "Enchant için eşyayı Q/G/U ile yere koy, iksiri üstüne at. Splındog asalı yoldaş çağırır.",
+    },
+  ]);
+}
+
+function frame(dt: number) {
+  time += dt;
+  if (shake > 0) shake = Math.max(0, shake - dt * 30);
+
   if (lootReveal) {
-    lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
+    updateLootReveal(dt);
+    handleInput(dt);
+    updateParticles(dt);
+    if (scene === "world") {
+      camX = player.x + player.w / 2 - W * 0.35;
+      camX = Math.max(0, Math.min(camX, WORLD_W - W));
+    } else camX = 0;
+  } else if (state === "playing" || state === "dialog" || state === "spectate") {
+    if (state === "playing") {
+      handleInput(dt);
+      resolvePlayer(dt);
+      tickVenomDot(dt);
+      updateEnemies(dt);
+      updateAllies(dt);
+      updateHazards(dt);
+      updatePlatTraps(dt);
+      updateItems(dt);
+      updateGroundDrops(dt);
+      updateProjectiles(dt);
+      updateThrownBottles(dt);
+      updatePotionAnims(dt);
+      updateBots(dt);
+    } else if (state === "spectate") {
+      updateEnemies(dt);
+      updateAllies(dt);
+      updateHazards(dt);
+      updatePlatTraps(dt);
+      updateProjectiles(dt);
+      updateThrownBottles(dt);
+      updatePotionAnims(dt);
+      updateBots(dt);
+      checkMpRoundEnd();
+    } else {
+      handleInput(dt);
+    }
+    updateParticles(dt);
+    invuln = Math.max(0, invuln - dt);
+
+    if (state !== "spectate") {
+      if (scene === "world") {
+        camX = player.x + player.w / 2 - W * 0.35;
+        camX = Math.max(0, Math.min(camX, WORLD_W - W));
+      } else {
+        camX = 0;
+      }
+    }
+
+    if (storyTimer > 0) {
+      storyTimer -= dt;
+      if (storyTimer <= 0) storyEl.classList.remove("show");
+    }
+    if (hintTimer > 0) {
+      hintTimer -= dt;
+      if (hintTimer <= 0) hintToast.classList.remove("show");
+    }
+
+    if (state === "playing") updateHud();
+  } else {
+    updateParticles(dt);
+  }
+
+  drawSky();
+  const ox = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+  const oy = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+  ctx.save();
+  ctx.translate(ox, oy);
+  drawHills();
+  if (scene === "interior") {
+    drawInteriorDecor();
+    drawPlatforms(interiorPlatforms);
+    drawGroundDrops();
+    drawAllies();
+  } else {
+    drawBuildings();
+    drawPlatforms(platforms);
+    drawPlatTraps();
+    drawHazards();
+    drawGroundDrops();
+    for (const it of items) drawWorldItem(it);
+    for (const e of enemies) drawEnemy(e);
+    drawAllies();
+  }
+  drawProjectiles();
+  drawThrownBottles();
+  drawPotionFx();
+  if (state !== "title" && state !== "spectate") drawPlayer();
+  if (state !== "title") drawMpPeers();
+  drawParticles();
+  ctx.restore();
+  drawLootReveal();
+}
+
+let last = performance.now();
+function loop(now: number) {
+  // Always reschedule first so one frame error cannot freeze the game.
+  requestAnimationFrame(loop);
+  try {
+    let dt = Math.min(0.033, (now - last) / 1000);
+    if (!Number.isFinite(dt) || dt < 0) dt = 1 / 60;
+    last = now;
+    frame(dt);
+  } catch (err) {
+    console.error("[Wack The Man] frame error:", err);
+  }
+}
+
+function startGame() {
+  playMode = "solo";
+  startGameWithMode("solo", []);
+}
+
+function restartFromOverlay() {
+  if (playMode !== "solo") {
+    returnToHub();
     return;
   }
-  if (state === "dialog") advanceDialog();
-});
-
-canvas.addEventListener("pointerdown", (e) => {
-  if (!lootReveal) return;
-  e.preventDefault();
-  lootReveal.t = Math.max(lootReveal.t, lootReveal.duration - 0.05);
-});
-
-state = "title";
-buildWorld();
-player.x = 200;
-requestAnimationFrame(loop);
-
-if (typeof location !== "undefined" && location.search.includes("debug=1")) {
-  (window as unknown as { wtmDebug: Record<string, unknown> }).wtmDebug = {
-    grantItem,
-    grantArmor,
-    swapBagSlot,
-    tryEnterDoor,
-    leftHand,
-    rightHand,
-    bag,
-    armor,
-    inventory,
-    player,
-    buildWorld,
-    updateHud,
-    getState: () => state,
-    setLevel: (n: number) => {
-      level = n;
-      scene = "world";
-      currentInterior = null;
-      chest = null;
-      player.x = 80;
-      player.y = GROUND_Y - player.h;
-      buildWorld();
-      updateHud();
-    },
-  };
+  ensureAudio();
+  hideOverlay();
+  resetGame();
+  setupMultiplayer([]);
+  state = dialogQueue.length ? "dialog" : "playing";
+  if (state === "dialog") showDialogLine();
 }
+
+window.addEventListener("keydown", (e) => {
+  keys.add(e.key);
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key))
+    e.preventDefault();
+  if (e.key === "r" || e.key === "R") {
+    if (state === "spectate" || (playMode !== "solo" && state === "dead")) {
+      returnToHub();
+      return;
+    }
+    if (
+      state === "playing" ||
+      state === "dead" ||
+      state === "win" ||
+      state === "dialog"
+    ) {
+      hideOverlay();
+      playMode = "solo";
+      resetGame();
+      setupMultiplayer([]);
+      state = dialogQueue.length ? "dialog" : "playing";
+      if (state === "dialog") showDialogLine();
+    }
+  }
+  if (e.key === "c" || e.key === "C") usePotion();
+  if ((e.key === "q" || e.key === "Q") && !e.repeat) dropLeftHand();
+  if ((e.key === "g" || e.key === "G") && !e.repeat) dropRightHand();
+  if ((e.key === "u" || e.key === "U") && !e.repeat) dropArmorPiece();
+  if (e.key === "Enter" && state === "title") startGame();
+});
+window.addEventListener("keyup", (e) => keys.delete(e.key));
+window.addEventListener("blur", () => keys.clear());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    keys.clear();
+  } else {
+    last = performance.now();
+  }
+});
+
+document.querySelector("#btn-start")!.addEventListener("click", startGame);
+document
+  .querySelector("#btn-restart")!
+  .addEventListener("click", restartFromOverlay);
+document.querySelector("#btn-shop")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openShop();
+});
+document.querySelector("#btn-shop-open")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openShop();
+});
+document.querySelector("#btn-shop-close")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  closeShop();
+});
+shopPanel.addEventListener("pointerdown", (e) => {
+  if (e.target === shopPanel) closeShop();
+});
+document.querySelector("#btn-lobby")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openLobby();
+});
+document.querySelector("#btn-lobby-close")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  closeLobby();
+});
+lobbyPanel.addEventListener("pointerdown", (e) => {
+  if (e.target === lobbyPanel) closeLobby();
+});
+document.querySelector("#btn-mode-peaceful")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  lobbyModePick = "peaceful";
+  refreshLobbyUi();
+});
+document.querySelector("#btn-mode-survivor")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  lobbyModePick = "survivor";
+  refreshLobbyUi();
+});
+document.querySelector("#btn-lobby-start")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  startLobbyMatch();
+});
+document.querySelector("#btn-room-host")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  hostRoom();
+});
+document.querySelector("#btn-room-join")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  joinRoom();
+});
+document.querySelector("#btn-auth-login")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  loginAccount();
+});
+document.querySelector("#btn-auth-register")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  registerAccount();
+});
+document.querySelector("#btn-friend-search")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  searchFriends();
+});
+friendSearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    searchFriends();
+  }
+});
