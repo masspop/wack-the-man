@@ -15,21 +15,149 @@
   <body>
     <div id="app">
       <div id="title-screen" class="title-screen">
-        <div class="title-card">
-          <p class="eyebrow">yan kaydır · savaş · keşfet</p>
-          <h1>WACK THE MAN</h1>
-          <p class="tagline">
-            10 seviye. 10 boss. Sol elde silah, sağ elde iksir. Çanta 3 yuva.
-            10. seviyede kardeşin için CERBERUS.
-          </p>
-          <button type="button" id="btn-start">OYUNA GİR</button>
-          <p class="controls-hint">
-            PC: ←→ hareket · Z/Space zıpla · X saldır · Q/G bırak · U zırh · C
-            iksir · ↑/E kapı/sandık · R yeniden
-          </p>
-          <p class="controls-hint mobile-hint">
-            Telefon: alttaki tuşlarla oyna · diyalog için kutuya dokun
-          </p>
+        <button
+          type="button"
+          id="btn-shop"
+          class="shop-fab"
+          title="Mağaza"
+          aria-label="Mağaza"
+        >
+          🛒
+        </button>
+
+        <div class="hub-layout">
+          <div class="title-card hub-center">
+            <p class="eyebrow">yan kaydır · savaş · keşfet</p>
+            <h1>WACK THE MAN</h1>
+
+            <div class="profile-block">
+              <canvas
+                id="profile-face"
+                width="96"
+                height="96"
+                aria-label="Profil yüzü"
+              ></canvas>
+              <div class="profile-fields">
+                <label>
+                  Kullanıcı adı
+                  <input
+                    id="auth-user"
+                    type="text"
+                    maxlength="16"
+                    placeholder="nick"
+                    autocomplete="username"
+                  />
+                </label>
+                <label>
+                  Parola
+                  <input
+                    id="auth-pass"
+                    type="password"
+                    maxlength="32"
+                    placeholder="••••••"
+                    autocomplete="current-password"
+                  />
+                </label>
+                <div class="auth-actions">
+                  <button type="button" id="btn-auth-login">GİRİŞ</button>
+                  <button type="button" id="btn-auth-register" class="btn-ghost">
+                    KAYIT
+                  </button>
+                </div>
+                <p id="auth-status" class="auth-status">Giriş yapmadın</p>
+              </div>
+            </div>
+
+            <p id="title-wallet" class="title-wallet">0 coin · $0</p>
+
+            <div class="title-actions">
+              <button type="button" id="btn-start">OYUNA GİR</button>
+              <button type="button" id="btn-lobby" class="btn-lobby">
+                LOBİ KUR
+              </button>
+              <button type="button" id="btn-shop-open" class="btn-shop-open">
+                MAĞAZA
+              </button>
+            </div>
+
+            <p class="controls-hint">
+              PC: ←→ hareket · Z/Space zıpla · X saldır · Q/G bırak · U zırh · C
+              iksir · ↑/E kapı/sandık · R yeniden
+            </p>
+            <p class="controls-hint mobile-hint">
+              Telefon: alttaki tuşlarla oyna · diyalog için kutuya dokun
+            </p>
+          </div>
+
+          <aside class="hub-friends" aria-label="Arkadaşlar">
+            <h3>ARA</h3>
+            <div class="search-row">
+              <input
+                id="friend-search"
+                type="text"
+                maxlength="16"
+                placeholder="Kullanıcı adı…"
+                autocomplete="off"
+              />
+              <button type="button" id="btn-friend-search">Ara</button>
+            </div>
+            <div id="friend-search-results" class="friend-results"></div>
+            <h3>İstekler</h3>
+            <div id="friend-requests" class="friend-results"></div>
+            <h3>Arkadaşlarım</h3>
+            <div id="friend-list" class="friend-results"></div>
+          </aside>
+        </div>
+
+        <div id="lobby-panel" class="shop-panel" aria-hidden="true">
+          <div class="shop-card lobby-card">
+            <div class="shop-head">
+              <h2>LOBİ</h2>
+              <button type="button" id="btn-lobby-close" class="shop-close">
+                ✕
+              </button>
+            </div>
+            <p class="shop-rate">4 kişiye kadar · arkadaş veya bot doldurulur</p>
+            <div class="lobby-modes">
+              <button type="button" id="btn-mode-peaceful" class="mode-btn">
+                <strong>PEACEFUL</strong>
+                <span>PvP yok · 12 bar · beraber boss</span>
+              </button>
+              <button type="button" id="btn-mode-survivor" class="mode-btn danger">
+                <strong>SURVIVOR</strong>
+                <span>PvP var · son kalan +5 coin · ölüler izler</span>
+              </button>
+            </div>
+            <h3 class="shop-sub">Oda kodu (arkadaş aynı site)</h3>
+            <div class="search-row room-row">
+              <input id="room-code" type="text" maxlength="8" placeholder="örn. WACK42" autocomplete="off" />
+              <button type="button" id="btn-room-host">KUR</button>
+              <button type="button" id="btn-room-join">KATIL</button>
+            </div>
+            <p id="room-status" class="auth-status">Boş bırakırsan botlarla dolar</p>
+            <h3 class="shop-sub">Davet (max +3)</h3>
+            <div id="lobby-invites" class="lobby-invites"></div>
+            <div id="lobby-friend-pick" class="friend-results"></div>
+            <button type="button" id="btn-lobby-start" class="btn-lobby-start">
+              LOBİYİ BAŞLAT
+            </button>
+          </div>
+        </div>
+
+        <div id="shop-panel" class="shop-panel" aria-hidden="true">
+          <div class="shop-card">
+            <div class="shop-head">
+              <h2>MAĞAZA</h2>
+              <button type="button" id="btn-shop-close" class="shop-close">
+                ✕
+              </button>
+            </div>
+            <p id="shop-balance" class="shop-balance">Bakiye: 0 coin · $0</p>
+            <p class="shop-rate">1 coin = $5 · sandık açınca şanslı parça düşer</p>
+            <div id="shop-list" class="shop-list"></div>
+            <h3 class="shop-sub">Koleksiyon / Kuşan</h3>
+            <div id="costume-list" class="costume-list"></div>
+          </div>
         </div>
       </div>
 
@@ -39,9 +167,10 @@
             <div class="hp-row">
               <span class="label">CAN</span>
               <div class="hp-bar"><div id="hp-fill"></div></div>
-              <span id="hp-text">450</span>
+              <span id="hp-text">1000</span>
             </div>
             <div id="zone-name">Seviye 1</div>
+            <div id="mode-tag" class="mode-tag"></div>
             <div id="armor-row" class="armor-row" title="Zırh">
               <span id="armor-helm" class="armor-ico" data-slot="helm">H</span>
               <span id="armor-chest" class="armor-ico" data-slot="chest">G</span>
@@ -99,6 +228,9 @@
         </div>
 
         <canvas id="game" width="960" height="540"></canvas>
+        <div id="spectate-banner" class="spectate-banner" hidden>
+          İZLEME MODU — diğer oyuncuları izliyorsun
+        </div>
 
         <div id="dialog" aria-hidden="true">
           <div class="dialog-name" id="dialog-name"></div>
@@ -126,12 +258,12 @@
             <button type="button" id="btn-armor" class="btn-armor">Zırh</button>
           </div>
           <div class="pad-right">
-            <button type="button" id="btn-bag1" class="btn-bag">1</button>
-            <button type="button" id="btn-bag2" class="btn-bag">2</button>
-            <button type="button" id="btn-bag3" class="btn-bag">3</button>
-            <button type="button" id="btn-potion" class="btn-item">İksir</button>
-            <button type="button" id="btn-jump" class="btn-jump">Zıpla</button>
-            <button type="button" id="btn-punch" class="btn-atk">Vur</button>
+            <button type="button" id="btn-jump">Zıpla</button>
+            <button type="button" id="btn-punch">Vur</button>
+            <button type="button" id="btn-potion">İksir</button>
+            <button type="button" id="btn-bag1">1</button>
+            <button type="button" id="btn-bag2">2</button>
+            <button type="button" id="btn-bag3">3</button>
           </div>
         </div>
       </div>
