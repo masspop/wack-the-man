@@ -2,7 +2,7 @@ import "./style.css";
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Scene = "world" | "interior";
-type EnemyKind = "goblin" | "archer" | "bat" | "boss";
+type EnemyKind = "goblin" | "bruiser" | "bat" | "boss";
 type BossKind =
   | "ironface"
   | "cloud"
@@ -32,6 +32,7 @@ type ChestType =
 type GameState = "title" | "playing" | "dialog" | "win" | "dead";
 type ProjKind =
   | "arrow"
+  | "club"
   | "spit"
   | "rain"
   | "poison"
@@ -382,6 +383,7 @@ const armorEnchant: Record<ArmorSlot, number> = {
   pants: 0,
   boots: 0,
 };
+
 let WORLD_W = 2480;
 let level = 1;
 let state: GameState = "title";
@@ -777,7 +779,7 @@ function swapBagSlot(index: number) {
       bag[index] = hand;
       showHint(
         hand
-          ? `Sağ el ↔ çanta ${index + 1}`
+                  ? `Sağ el ↔ çanta ${index + 1}`
           : `${POTIONS[slotItem.id].label} sağ ele`,
       );
     }
@@ -821,14 +823,14 @@ function addEnemy(
 ) {
   const sizes: Record<Exclude<EnemyKind, "boss">, { w: number; h: number }> = {
     goblin: { w: 32, h: 44 },
-    archer: { w: 30, h: 48 },
+    bruiser: { w: 34, h: 50 },
     bat: { w: 30, h: 22 },
   };
   const s = sizes[kind];
   const hp = normalHp();
   enemies.push({
     kind,
-    name: kind === "goblin" ? "Goblin" : kind === "archer" ? "Okçu" : "Yarasa",
+    name: kind === "goblin" ? "Goblin" : kind === "bruiser" ? "Sopacı" : "Yarasa",
     x,
     y,
     w: s.w,
@@ -1088,7 +1090,7 @@ function buildWorld() {
   });
 
   const count = Math.min(16, 6 + level * 2);
-  const kinds: Array<Exclude<EnemyKind, "boss">> = ["goblin", "archer", "bat"];
+  const kinds: Array<Exclude<EnemyKind, "boss">> = ["goblin", "bruiser", "bat"];
   for (let i = 0; i < count; i++) {
     const t = (i + 1) / (count + 1);
     const x = 320 + t * (WORLD_W - 900);
@@ -1096,7 +1098,7 @@ function buildWorld() {
     if (Math.abs(x - (WORLD_W - 450)) < 180) continue;
     const kind = kinds[(i + level) % kinds.length]!;
     if (kind === "bat") addEnemy("bat", x, 170 + (i % 4) * 28, 110);
-    else if (kind === "archer") addEnemy("archer", x, GROUND_Y - 48, 100);
+    else if (kind === "bruiser") addEnemy("bruiser", x, GROUND_Y - 50, 100);
     else addEnemy("goblin", x, GROUND_Y - 44, 90);
   }
 
@@ -1164,7 +1166,8 @@ function updateHud() {
   const pct = Math.max(0, (player.hp / player.maxHp) * 100);
   hpFill.style.width = `${pct}%`;
   hpText.textContent = String(Math.max(0, Math.ceil(player.hp)));
-    if (scene === "interior" && currentInterior) {
+
+  if (scene === "interior" && currentInterior) {
     zoneName.textContent = currentInterior.title;
   } else {
     const boss = nearBoss();
@@ -1530,7 +1533,7 @@ function onBottleLand(b: ThrownBottle) {
   beep(180, 0.08, "sawtooth", 0.03);
 
   if (b.id === "poison") {
-        // splash damage zone — hit nearby enemies
+    // splash damage zone — hit nearby enemies
     let hitAny = false;
     for (const e of enemies) {
       if (!e.alive) continue;
@@ -1557,7 +1560,7 @@ function onBottleLand(b: ThrownBottle) {
           color: "#b44dff",
           size: 2 + Math.random() * 3,
         });
-      }
+              }
     }
   } else if (b.id === "pink") {
     spawnAllies(cx - 20, Math.min(cy, GROUND_Y - 40));
@@ -1768,7 +1771,8 @@ function resolvePlayer(dt: number) {
 
 function contactDamage(e: Enemy) {
   if (e.kind === "goblin") return 80;
-  if (e.kind === "archer" || e.kind === "bat") return 15;
+  if (e.kind === "bruiser") return 20;
+  if (e.kind === "bat") return 15;
   if (e.bossKind === "ironface") return 25;
   if (e.bossKind === "cloud") return 35;
   if (e.bossKind === "mothman") return 40;
@@ -1885,7 +1889,6 @@ function onBossDefeated(e: Enemy) {
     return;
   }
 
-  grantItem({ kind: "potion", id: "purple" });
   player.hp = Math.min(player.maxHp, player.hp + 80);
   const cleared = level;
   const bossName = e.name;
@@ -1895,10 +1898,10 @@ function onBossDefeated(e: Enemy) {
     { name: bossName, text: "…Yeter… git…" },
     {
       name: "???",
-      text: `Seviye ${cleared} temiz. Enchant iksiri kazandın.`,
+      text: `Seviye ${cleared} temiz. İleri — sandıklarda şansını dene.`,
     },
   ]);
-  showStory(`Enchant! Seviye ${level}.`);
+  showStory(`Seviye ${level}.`);
 
   scene = "world";
   currentInterior = null;
@@ -1930,7 +1933,7 @@ function triggerBossIntro(e: Enemy) {
     ],
     firefox: [
       { name: "FIREFOX", text: "Üç kuyruk. Bir nefes. Kül olursun." },
-          ],
+    ],
     minotaur: [
       { name: "MINOTAUR", text: "Boynuz hücumu. Zıpla… ya da kırıl." },
     ],
@@ -2296,7 +2299,7 @@ function updateBoss(e: Enemy, dt: number) {
         shake = 14;
         e.phase = 0;
         e.attackCd = 2.0;
-              }
+      }
     }
   } else {
     // cerberus
@@ -2338,7 +2341,7 @@ function updateBoss(e: Enemy, dt: number) {
         showHint("Lav yükseliyor! Platforma çık!");
       } else {
         spawnProjectile(
-          "breath",
+                    "breath",
           e.x + e.w / 2,
           e.y + 30,
           e.facing * 260,
@@ -2618,7 +2621,8 @@ function updateEnemies(dt: number) {
         );
         e.attackCd = 1.8;
       }
-    } else if (e.kind === "archer") {
+    } else if (e.kind === "bruiser") {
+      // melee only — holds club but does not throw it
       e.x += e.vx * dt;
       if (e.x < e.patrolL || e.x > e.patrolR) e.vx *= -1;
       e.facing = e.vx >= 0 ? 1 : -1;
@@ -2628,24 +2632,6 @@ function updateEnemies(dt: number) {
       if (hit && e.vy >= 0) {
         e.y = hit.y - e.h;
         e.vy = 0;
-      }
-      if (e.attackCd <= 0 && Math.abs(player.x - e.x) < 420 && invisTimer <= 0) {
-        const dir = player.x >= e.x ? 1 : -1;
-        e.facing = dir;
-        spawnProjectile(
-          "arrow",
-          e.x + (dir > 0 ? e.w : -12),
-          e.y + 18,
-          dir * 340,
-          -20,
-          17,
-          2.4,
-          true,
-          16,
-          6,
-        );
-        e.attackCd = 1.6;
-        beep(500, 0.03, "triangle", 0.015);
       }
     } else {
       e.x += e.vx * dt;
@@ -3060,6 +3046,7 @@ function handleInput(dt: number) {
   if (right) ax += 1;
   if (ax !== 0) facing = ax > 0 ? 1 : -1;
   player.vx = ax * MOVE * moveMul;
+
   if (jump) jumpBuffered = 0.12;
   jumpBuffered = Math.max(0, jumpBuffered - dt);
   coyote = Math.max(0, coyote - dt);
@@ -3135,7 +3122,7 @@ function handleInput(dt: number) {
       showHint("↑ / E — ROCKET RACCOON");
     } else if (player.x < 150) {
       showHint("↑ / E — dışarı çık");
-    }
+          }
   }
 }
 
@@ -3478,10 +3465,7 @@ function drawLootReveal() {
       ctx.fillStyle = "#c9a227";
       ctx.fillRect(-12, 16, 24, 8);
     } else if (loot.kind === "potion") {
-      ctx.fillStyle = POTIONS[loot.id].color;
-      ctx.fillRect(-10, -10, 20, 28);
-      ctx.fillStyle = "#f0f4ff";
-      ctx.fillRect(-8, -16, 16, 8);
+      drawPotionBottle(0, 4, POTIONS[loot.id].color, 2.2, 0);
     } else {
       ctx.fillStyle = "#708090";
       ctx.fillRect(-16, -20, 32, 36);
@@ -3589,33 +3573,97 @@ function drawInteriorDecor() {
   }
 }
 
+function drawPotionBottle(
+  ox: number,
+  oy: number,
+  color: string,
+  scale = 1,
+  tilted = 0,
+) {
+  ctx.save();
+  ctx.translate(ox, oy);
+  if (tilted) ctx.rotate(tilted);
+  ctx.scale(scale, scale);
+
+  // glass body
+  ctx.fillStyle = "rgba(220,235,255,0.35)";
+  ctx.strokeStyle = "rgba(190,210,230,0.85)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-5, -2);
+  ctx.quadraticCurveTo(-7, 4, -6.5, 10);
+  ctx.quadraticCurveTo(-6, 16, 0, 17);
+  ctx.quadraticCurveTo(6, 16, 6.5, 10);
+  ctx.quadraticCurveTo(7, 4, 5, -2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // liquid
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-5.2, 4);
+  ctx.quadraticCurveTo(-6.2, 10, -5.5, 14);
+  ctx.quadraticCurveTo(-4, 17, 0, 15.5);
+  ctx.quadraticCurveTo(4, 17, 5.5, 14);
+  ctx.quadraticCurveTo(6.2, 10, 5.2, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // liquid meniscus shine
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.fillRect(-3.5, 4.5, 7, 1.5);
+
+  // neck
+  ctx.fillStyle = "rgba(210,230,250,0.55)";
+  ctx.fillRect(-2.2, -8, 4.4, 7);
+  ctx.strokeStyle = "rgba(170,195,220,0.9)";
+  ctx.strokeRect(-2.2, -8, 4.4, 7);
+
+  // cork
+  ctx.fillStyle = "#8a5a2a";
+  ctx.fillRect(-2.6, -11, 5.2, 3.5);
+  ctx.fillStyle = "#a87038";
+  ctx.fillRect(-2.2, -11.5, 4.4, 1.5);
+
+  // glass highlight
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.fillRect(-4.2, 0, 1.6, 9);
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  ctx.fillRect(3.2, 2, 1.2, 6);
+
+  // label wrap
+  ctx.fillStyle = "rgba(245,240,220,0.85)";
+  ctx.fillRect(-4.5, 7, 9, 3.5);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.7;
+  ctx.fillRect(-3.5, 7.6, 7, 2);
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
 function drawHandPotion(x: number, y: number) {
   // drinking animation: raise bottle to mouth
   if (drinkAnimT > 0 && drinkAnimId) {
     const t = 1 - drinkAnimT / 0.55;
     const color = POTIONS[drinkAnimId].color;
     const lift = t * 18;
-    const bx = x + 4;
-    const by = y - lift;
-    ctx.fillStyle = color;
-    ctx.fillRect(bx, by + 4, 8, 12);
-    ctx.fillStyle = "#f0f4ff";
-    ctx.fillRect(bx + 1, by, 6, 4);
-    // liquid drip into mouth
+    const tilt = -0.55 * Math.min(1, t * 1.4);
+    drawPotionBottle(x + 6, y + 10 - lift, color, 1.05, tilt);
     if (t > 0.35) {
       ctx.fillStyle = color;
-      ctx.globalAlpha = 0.7;
-      ctx.fillRect(bx + 3, by + 14, 2, 6);
+      ctx.globalAlpha = 0.65;
+      ctx.beginPath();
+      ctx.ellipse(x + 6, y + 16 - lift * 0.2, 1.4, 3 + t * 2, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.globalAlpha = 1;
     }
     return;
   }
   if (!rightHand.item || rightHand.item.kind !== "potion") return;
   const color = POTIONS[rightHand.item.id].color;
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y + 4, 7, 11);
-  ctx.fillStyle = "#f0f4ff";
-  ctx.fillRect(x + 1, y, 5, 4);
+  drawPotionBottle(x + 4, y + 12, color, 0.95, -0.15);
 }
 
 function drawPlayer() {
@@ -3791,14 +3839,32 @@ function drawEnemy(e: Enemy) {
     ctx.fill();
     ctx.fillStyle = "#2a1a3a";
     ctx.fillRect(x + 10, y + 6, 12, 10);
-  } else if (e.kind === "archer") {
-    ctx.fillStyle = "#4a5538";
-    ctx.fillRect(x + 5, y + 16, 22, 24);
-    ctx.fillStyle = "#b09080";
-    ctx.fillRect(x + 8, y + 2, 16, 14);
-    ctx.fillStyle = "#ff4444";
+  } else if (e.kind === "bruiser") {
+    // stocky club-wielding thug
+    ctx.fillStyle = "#3a2a48";
+    ctx.fillRect(x + 6, y + 38, 9, 10);
+    ctx.fillRect(x + 20, y + 38, 9, 10);
+    ctx.fillStyle = "#5a4068";
+    ctx.fillRect(x + 5, y + 16, 24, 24);
+    ctx.fillStyle = "#c09070";
+    ctx.fillRect(x + 8, y + 2, 18, 15);
+    ctx.fillStyle = "#2a1a28";
     ctx.fillRect(x + 11, y + 7, 3, 3);
-    ctx.fillRect(x + 18, y + 7, 3, 3);
+    ctx.fillRect(x + 19, y + 7, 3, 3);
+    ctx.fillStyle = "#8a3040";
+    ctx.fillRect(x + 12, y + 12, 10, 2);
+    // held spiked club (20 dmg item)
+    const handX = e.facing >= 0 ? x + 26 : x - 4;
+    ctx.fillStyle = "#6a4020";
+    ctx.fillRect(handX, y + 14, 5, 22);
+    ctx.fillStyle = "#8a9098";
+    ctx.beginPath();
+    ctx.arc(handX + 2.5, y + 12, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#c0c8d0";
+    ctx.fillRect(handX, y + 6, 3, 3);
+    ctx.fillRect(handX + 3, y + 9, 3, 3);
+    ctx.fillRect(handX - 1, y + 11, 3, 3);
   } else {
     const bk = e.bossKind ?? "ironface";
     // ground contact shadow
@@ -3825,7 +3891,7 @@ function drawEnemy(e: Enemy) {
       ctx.beginPath();
       ctx.ellipse(
         x + e.w * 0.55,
-                y + e.h * 0.55,
+        y + e.h * 0.55,
         e.w * 0.48,
         e.h * 0.42,
         0,
@@ -3837,7 +3903,7 @@ function drawEnemy(e: Enemy) {
       ctx.beginPath();
       ctx.ellipse(x + e.w * 0.35, y + e.h * 0.5, e.w * 0.22, e.h * 0.28, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#ff3030";
+            ctx.fillStyle = "#ff3030";
       ctx.fillRect(x + 8, y + 14, 5, 5);
       ctx.fillRect(x + 18, y + 14, 5, 5);
       ctx.fillStyle = "#f0e080";
@@ -4165,20 +4231,13 @@ function drawThrownBottles() {
     if (!b.alive) continue;
     const x = b.x - camX;
     const y = b.y;
-    ctx.save();
-    ctx.translate(x + b.w / 2, y + b.h / 2);
-    ctx.rotate(b.spin);
+    drawPotionBottle(x + b.w / 2, y + b.h / 2, b.color, 1.15, b.spin);
+    // trail droplets
     ctx.fillStyle = b.color;
-    ctx.fillRect(-4, -6, 8, 12);
-    ctx.fillStyle = "#f0f4ff";
-    ctx.fillRect(-3, -8, 6, 4);
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.fillRect(-2, -4, 2, 4);
-    ctx.restore();
-    // trail
-    ctx.fillStyle = b.color;
-    ctx.globalAlpha = 0.35;
-    ctx.fillRect(x - b.vx * 0.02, y - b.vy * 0.02, 4, 4);
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.arc(x - b.vx * 0.02 + 4, y - b.vy * 0.02 + 4, 2.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
 }
@@ -4187,16 +4246,22 @@ function drawPotionFx() {
   if (pourAnimT > 0) {
     const x = pourAnimX - camX;
     const y = pourAnimY;
-    ctx.strokeStyle = `rgba(180,77,255,${0.5 + Math.sin(time * 20) * 0.3})`;
-    ctx.lineWidth = 3;
+    drawPotionBottle(x, y - 30, "#b44dff", 1.25, 0.85);
+    ctx.strokeStyle = `rgba(180,77,255,${0.55 + Math.sin(time * 20) * 0.3})`;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(x, y - 28);
-    ctx.lineTo(x + Math.sin(time * 30) * 3, y);
+    ctx.moveTo(x + 6, y - 18);
+    ctx.quadraticCurveTo(
+      x + 4 + Math.sin(time * 28) * 4,
+      y - 8,
+      x + Math.sin(time * 22) * 2,
+      y,
+    );
     ctx.stroke();
-    ctx.fillStyle = "#b44dff";
-    ctx.fillRect(x - 5, y - 34, 10, 12);
-    ctx.fillStyle = "#f0f4ff";
-    ctx.fillRect(x - 3, y - 38, 6, 4);
+    ctx.fillStyle = "rgba(180,77,255,0.55)";
+    ctx.beginPath();
+    ctx.arc(x + Math.sin(time * 22) * 2, y + 2, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -4209,6 +4274,20 @@ function drawProjectiles() {
       ctx.fillRect(x, p.y + 2, p.w, 3);
       ctx.fillStyle = "#888";
       ctx.fillRect(x + (p.vx >= 0 ? p.w - 4 : 0), p.y, 4, 6);
+    } else if (p.kind === "club") {
+      ctx.save();
+      ctx.translate(x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(time * 10 * (p.vx >= 0 ? 1 : -1));
+      ctx.fillStyle = "#6a4020";
+      ctx.fillRect(-3, -8, 6, 16);
+      ctx.fillStyle = "#8a9098";
+      ctx.beginPath();
+      ctx.arc(0, -9, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c0c8d0";
+      ctx.fillRect(-4, -12, 3, 3);
+      ctx.fillRect(1, -11, 3, 3);
+      ctx.restore();
     } else if (p.kind === "spit") {
       ctx.fillStyle = "#7dffb3";
       ctx.beginPath();
@@ -4449,10 +4528,16 @@ function frame(dt: number) {
 
 let last = performance.now();
 function loop(now: number) {
-  const dt = Math.min(0.033, (now - last) / 1000);
-  last = now;
-  frame(dt);
+  // Always reschedule first so one frame error cannot freeze the game.
   requestAnimationFrame(loop);
+  try {
+    let dt = Math.min(0.033, (now - last) / 1000);
+    if (!Number.isFinite(dt) || dt < 0) dt = 1 / 60;
+    last = now;
+    frame(dt);
+  } catch (err) {
+    console.error("[Wack The Man] frame error:", err);
+  }
 }
 
 function startGame() {
@@ -4497,6 +4582,14 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && state === "title") startGame();
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key));
+window.addEventListener("blur", () => keys.clear());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    keys.clear();
+  } else {
+    last = performance.now();
+  }
+});
 
 document.querySelector("#btn-start")!.addEventListener("click", startGame);
 document
