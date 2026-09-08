@@ -525,33 +525,51 @@ const BOSS_ORDER: BossKind[] = [
   "cerberus",
 ];
 
+/** Level 1 → 10: HP strictly rises so later bosses are always tankier */
 const BOSS_HP: Record<BossKind, number> = {
-  ironface: 700,
-  cloud: 800,
-  mothman: 1000,
-  anaconda: 1300,
-  kingkong: 1700,
-  firefox: 2200,
-  minotaur: 2800,
-    creeper: 3500,
-  sphinx: 4300,
-  cerberus: 5400,
+  ironface: 650,
+  cloud: 950,
+  mothman: 1350,
+  anaconda: 1850,
+  kingkong: 2500,
+  firefox: 3300,
+  minotaur: 4300,
+  creeper: 5500,
+  sphinx: 7000,
+  cerberus: 9000,
+};
+
+/** Contact / projectile / special hit damage — also strictly rising by boss order */
+const BOSS_ATK: Record<
+  BossKind,
+  { contact: number; proj: number; special: number; stomp: number }
+> = {
+  ironface: { contact: 30, proj: 0, special: 38, stomp: 42 },
+  cloud: { contact: 42, proj: 30, special: 0, stomp: 0 },
+  mothman: { contact: 55, proj: 50, special: 0, stomp: 0 },
+  anaconda: { contact: 70, proj: 58, special: 0, stomp: 0 },
+  kingkong: { contact: 90, proj: 0, special: 100, stomp: 0 },
+  firefox: { contact: 115, proj: 130, special: 125, stomp: 0 },
+  minotaur: { contact: 145, proj: 160, special: 185, stomp: 0 },
+  creeper: { contact: 180, proj: 210, special: 240, stomp: 0 },
+  sphinx: { contact: 225, proj: 260, special: 320, stomp: 0 },
+  cerberus: { contact: 290, proj: 280, special: 380, stomp: 110 },
 };
 
 const BOSS_META: Record<
   BossKind,
   { name: string; w: number; h: number }
 > = {
-  ironface: { name: "İRONFACE", w: 70, h: 88 },
-  cloud: { name: "THE CLOUD", w: 68, h: 80 },
-  mothman: { name: "MOTHMAN", w: 72, h: 78 },
-  anaconda: { name: "ANACONDA", w: 100, h: 48 },
-  kingkong: { name: "KINGKONG", w: 90, h: 110 },
-  firefox: { name: "FIREFOX", w: 86, h: 70 },
-  minotaur: { name: "MINOTAUR", w: 78, h: 96 },
-  creeper: { name: "CREEPER", w: 64, h: 86 },
-  sphinx: { name: "SPHINX", w: 110, h: 90 },
-  cerberus: { name: "CERBERUS", w: 120, h: 100 },
+  ironface: { name: "İRONFACE", w: 74, h: 96 },
+  cloud: { name: "THE CLOUD", w: 78, h: 88 },
+  mothman: { name: "MOTHMAN", w: 80, h: 92 },
+  anaconda: { name: "ANACONDA", w: 150, h: 62 },
+  kingkong: { name: "KINGKONG", w: 96, h: 118 },
+  firefox: { name: "FIREFOX", w: 92, h: 78 },
+  minotaur: { name: "MINOTAUR", w: 84, h: 104 },
+  creeper: { name: "CREEPER", w: 70, h: 94 },
+  sphinx: { name: "SPHINX", w: 120, h: 96 },
+  cerberus: { name: "CERBERUS", w: 130, h: 108 },
 };
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -559,6 +577,9 @@ const ctx = canvas.getContext("2d")!;
 const wrap = document.querySelector<HTMLElement>("#wrap")!;
 const titleEl = document.querySelector<HTMLElement>("#title-screen")!;
 const shopPanel = document.querySelector<HTMLElement>("#shop-panel")!;
+const settingsPanel = document.querySelector<HTMLElement>("#settings-panel")!;
+const guideWeapons = document.querySelector<HTMLElement>("#guide-weapons")!;
+const guidePotions = document.querySelector<HTMLElement>("#guide-potions")!;
 const shopList = document.querySelector<HTMLElement>("#shop-list")!;
 const costumeList = document.querySelector<HTMLElement>("#costume-list")!;
 const shopBalance = document.querySelector<HTMLElement>("#shop-balance")!;
@@ -690,14 +711,14 @@ let venomDot = 0;
 let venomAcc = 0;
 let chest: Chest | null = null;
 let parchmentShown = false;
-let houseRocketShown = false;
-/** Bar sandığı seviye boyunca 1 kez — gir-çık ile yenilenmez */
-let barChestSave: {
+/** Her barın sandığı seviye boyunca ayrı — gir-çık ile yenilenmez */
+type BarChestSave = {
   type: ChestType;
   opened: boolean;
   isParchment: boolean;
   parchmentShown: boolean;
-} | null = null;
+};
+let barChestSaves: Record<string, BarChestSave> = {};
 let enchantSparkleT = 0;
 let drinkAnimT = 0;
 let drinkAnimId: PotionId | null = null;
@@ -988,6 +1009,7 @@ function rollShopChestLoot(id: ShopChestId): LootEntry {
 
 function openShop() {
   closeLobby();
+  closeSettings();
   shopPanel.classList.add("open");
   shopPanel.setAttribute("aria-hidden", "false");
   refreshShopUi();
@@ -999,18 +1021,65 @@ function closeShop() {
   shopPanel.setAttribute("aria-hidden", "true");
 }
 
+function fillGuideUi() {
+  const weaponLines: { id: WeaponId; how: string }[] = [
+    { id: "fist", how: "Yakın dövüş. Zayıf ama her zaman hazır." },
+    { id: "knife", how: "Hızlı yakın kesik. Düşük hasar, kısa cooldown." },
+    { id: "axe", how: "Ağır yakın savuş. Yavaş ama yumruktan sert." },
+    { id: "rifle", how: "Uzaktan mermi. Mermi sınırlı (max 5) — israf etme." },
+    { id: "sword", how: "Güçlü yakın kılıç. Dengeli menzil ve hasar." },
+    { id: "lava", how: "Ateş mermisi fırlatır. Orta menzil, yanık hasarı." },
+    { id: "staff", how: "Büyü topu. En güçlü silahlardan; sandıktan nadir." },
+  ];
+  guideWeapons.innerHTML = weaponLines
+    .map(
+      (w) =>
+        `<div class="guide-row"><strong>${WEAPONS[w.id].label} · ${WEAPON_BASE[w.id]} hasar</strong><span>${w.how}</span></div>`,
+    )
+    .join("");
+  guidePotions.innerHTML = (
+    Object.keys(POTIONS) as PotionId[]
+  )
+    .map((id) => {
+      const p = POTIONS[id];
+      const use = POTION_USE[id];
+      const how =
+        use === "drink"
+          ? "C ile iç."
+          : use === "throw"
+            ? "C ile düşmana doğru at."
+            : "C ile yere bırak / eşyanın üstüne dök.";
+      return `<div class="guide-row"><strong>${p.label}</strong><span>${p.hint} · ${how}</span></div>`;
+    })
+    .join("");
+}
+
+function openSettings() {
+  closeShop();
+  closeLobby();
+  fillGuideUi();
+  settingsPanel.classList.add("open");
+  settingsPanel.setAttribute("aria-hidden", "false");
+  beep(360, 0.05, "sine", 0.02);
+}
+
+function closeSettings() {
+  settingsPanel.classList.remove("open");
+  settingsPanel.setAttribute("aria-hidden", "true");
+}
+
 function openLobby() {
   if (!currentUser) {
     showHint("Önce giriş yap");
     return;
   }
   closeShop();
+  closeSettings();
   lobbyPanel.classList.add("open");
   lobbyPanel.setAttribute("aria-hidden", "false");
   refreshLobbyUi();
   beep(400, 0.05, "triangle", 0.02);
 }
-
 function closeLobby() {
   lobbyPanel.classList.remove("open");
   lobbyPanel.setAttribute("aria-hidden", "true");
@@ -1069,6 +1138,7 @@ function equipCosmetic(id: CosmeticId) {
   beep(520, 0.05, "triangle", 0.02);
   showHint(`${def.label} ${equippedCosmetics[def.slot] === id ? "kuşanıldı" : "çıkarıldı"}`);
 }
+
 function drawShopChestArt(
   c: CanvasRenderingContext2D,
   theme: ShopChestId,
@@ -1602,6 +1672,7 @@ function fillLobbyRosterFrom(preferred: string[]): string[] {
   }
   return names.slice(0, 3);
 }
+
 function startGameWithMode(mode: PlayMode, guests: string[] = []) {
   ensureAudio();
   playMode = mode;
@@ -2096,7 +2167,6 @@ function applyCosmeticOverlays(
     c.fillRect(x + 19, y + 46, 4, 3);
   }
 }
-
 function aabb(a: Rect, b: Rect) {
   return (
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
@@ -2138,7 +2208,7 @@ function weaponDamage(id: WeaponId) {
 }
 
 function itemShortLabel(it: InvItem | null): string {
-    if (!it) return "—";
+  if (!it) return "—";
   if (it.kind === "weapon") {
     const base = WEAPONS[it.id].label;
     if (it.id === "rifle") return `${base} ${it.ammo ?? 0}`;
@@ -2220,7 +2290,7 @@ function rollChestLoot(type: Exclude<ChestType, "none">): LootResult {
   if (type === "obsidian") {
     return asLoot(
       rollWeighted([
-        { p: 0.4, items: ["boots" as ArmorId] },
+        { p:, 0.4, items: ["boots" as ArmorId] },
         { p: 0.3, items: ["pants" as ArmorId] },
         { p: 0.2, items: ["helm" as ArmorId] },
         { p: 0.1, items: ["chest" as ArmorId] },
@@ -2511,63 +2581,54 @@ function burst(x: number, y: number, color: string, n = 10) {
   }
 }
 
-function buildInteriorsMeta(barX: number, houseX: number | null) {
+function buildInteriorsMeta(barXs: number[]) {
   for (const k of Object.keys(interiors)) delete interiors[k];
-  interiors.bar1 = {
-    id: "bar1",
-    title: "Kör Fare Bar",
-    kind: "bar",
-    exitX: 80,
-    returnX: barX + 50,
-    returnY: GROUND_Y - 52,
-  };
-  if (houseX !== null) {
-    interiors.house1 = {
-      id: "house1",
-      title: "Eski Ev",
+  barXs.forEach((barX, i) => {
+    const id = `bar${i}`;
+    interiors[id] = {
+      id,
+      title: barXs.length > 1 ? `Kör Fare Bar ${i + 1}` : "Kör Fare Bar",
+      kind: "bar",
       exitX: 80,
-      kind: "house",
-      returnX: houseX + 40,
+      returnX: barX + 50,
       returnY: GROUND_Y - 52,
     };
-  }
+  });
 }
 
 function buildInteriorRoom(def: InteriorDef) {
   interiorPlatforms.length = 0;
   chest = null;
   parchmentShown = false;
-  houseRocketShown = false;
   lootReveal = null;
   interiorPlatforms.push({ x: 0, y: GROUND_Y, w: INTERIOR_W, h: 24 });
-  // Climbable one-way staircase to upstairs chest / poster
+  // Climbable one-way staircase to upstairs chest
   interiorPlatforms.push({ x: 160, y: 368, w: 150, h: 18, oneWay: true });
   interiorPlatforms.push({ x: 380, y: 310, w: 160, h: 18, oneWay: true });
   interiorPlatforms.push({ x: 620, y: 250, w: 180, h: 18, oneWay: true });
 
   if (def.kind === "bar") {
-    if (!barChestSave) {
+    let save = barChestSaves[def.id];
+    if (!save) {
       const ctype = rollChestType();
-      barChestSave = {
+      save = {
         type: ctype,
         opened: false,
         isParchment: ctype === "none",
         parchmentShown: false,
       };
+      barChestSaves[def.id] = save;
     }
     chest = {
       x: 690,
       y: 198,
       w: 56,
       h: 44,
-      type: barChestSave.type,
-      opened: barChestSave.opened,
-      isParchment: barChestSave.isParchment,
+      type: save.type,
+      opened: save.opened,
+      isParchment: save.isParchment,
     };
-    parchmentShown = barChestSave.parchmentShown;
-  } else {
-    // House has no loot chest — Rocket Raccoon poster upstairs
-    houseRocketShown = true;
+    parchmentShown = save.parchmentShown;
   }
 }
 
@@ -2583,17 +2644,22 @@ function buildWorld() {
   platTraps.length = 0;
   groundDrops.length = 0;
   chest = null;
-  barChestSave = null;
+  barChestSaves = {};
   levelClearPending = false;
 
   // Longer maps so boss is farther / run lasts more
   // Multiplayer modes: 12 bars (6x normal density) + wider map
   const mpBars = playMode !== "solo";
   WORLD_W = mpBars ? 7200 + level * 320 : 4200 + level * 260;
-  const houseX = level % 2 === 1 ? Math.floor(WORLD_W * 0.12) : null;
-  const barX = Math.floor(WORLD_W * 0.32);
 
-  buildInteriorsMeta(barX, houseX);
+  const barCount = mpBars ? 12 : 2;
+  const barXs: number[] = [];
+  for (let bi = 0; bi < barCount; bi++) {
+    barXs.push(
+      Math.floor(220 + (bi / Math.max(1, barCount - 1)) * (WORLD_W - 900)),
+    );
+  }
+  buildInteriorsMeta(barXs);
 
   // Ground: full collision
   addPlat(0, GROUND_Y, WORLD_W, 24, false);
@@ -2616,40 +2682,15 @@ function buildWorld() {
     if (chance(0.65) || airPlats.indexOf(p) % 2 === 0) addPlatTrap(p);
   }
 
-  // Keys on upper platforms
+  // Keys on upper platforms — enough for both bars in solo
   addItem("key", airPlats[0]!.x + 20, airPlats[0]!.y - 28);
+  addItem("key", airPlats[3]!.x + 30, airPlats[3]!.y - 28);
   if (level >= 4) {
     addItem("key", airPlats[7]!.x + 30, airPlats[7]!.y - 28);
   }
 
-  if (houseX !== null) {
-    buildings.push({
-      x: houseX,
-      y: GROUND_Y - 110,
-      w: 120,
-      h: 110,
-      kind: "house",
-      label: "EV",
-    });
-    doors.push({
-      x: houseX + 40,
-      y: GROUND_Y - 56,
-      w: 36,
-      h: 56,
-      id: "d-house",
-      label: "Ev",
-      target: "interior",
-      interiorId: "house1",
-      needsKey: false,
-    });
-  }
-
-  const barCount = mpBars ? 12 : 1;
   for (let bi = 0; bi < barCount; bi++) {
-    const bx =
-      barCount === 1
-        ? barX
-        : Math.floor(220 + (bi / Math.max(1, barCount - 1)) * (WORLD_W - 900));
+    const bx = barXs[bi]!;
     buildings.push({
       x: bx,
       y: GROUND_Y - 120,
@@ -2666,7 +2707,7 @@ function buildWorld() {
       id: `d-bar-${bi}`,
       label: barCount > 1 ? `Bar ${bi + 1}` : "Bar",
       target: "interior",
-      interiorId: "bar1",
+      interiorId: `bar${bi}`,
       needsKey: true,
     });
   }
@@ -2676,14 +2717,15 @@ function buildWorld() {
   for (let i = 0; i < count; i++) {
     const t = (i + 1) / (count + 1);
     const x = 320 + t * (WORLD_W - 900);
-    if (Math.abs(x - (barX + 70)) < 140) continue;
+    if (barXs.some((bx) => Math.abs(x - (bx + 70)) < 140)) continue;
     if (Math.abs(x - (WORLD_W - 450)) < 180) continue;
     const kind = kinds[(i + level) % kinds.length]!;
     if (kind === "bat") addEnemy("bat", x, 170 + (i % 4) * 28, 110);
     else if (kind === "bruiser") addEnemy("bruiser", x, GROUND_Y - 50, 100);
     else addEnemy("goblin", x, GROUND_Y - 44, 90);
   }
-    addBoss(WORLD_W - 480);
+
+  addBoss(WORLD_W - 480);
   addItem("coin", airPlats[1]!.x + 30, airPlats[1]!.y - 28);
   addItem("coin", airPlats[4]!.x + 20, airPlats[4]!.y - 28);
   addItem("coin", airPlats[8]!.x + 24, airPlats[8]!.y - 28);
@@ -3208,7 +3250,7 @@ function updatePotionAnims(dt: number) {
     if (Math.random() < 0.35 && drinkAnimId) {
       const c = POTIONS[drinkAnimId].color;
       particles.push({
-                x: player.x + player.w / 2 + facing * 6,
+        x: player.x + player.w / 2 + facing * 6,
         y: player.y + 4,
         vx: (Math.random() - 0.5) * 40,
         vy: -40 - Math.random() * 40,
@@ -3240,7 +3282,6 @@ function updatePotionAnims(dt: number) {
     }
   }
 }
-
 function usePotion() {
   if (state !== "playing") return;
   if (potionBusy || drinkAnimT > 0 || thrownBottles.length > 0) {
@@ -3359,17 +3400,12 @@ function contactDamage(e: Enemy) {
   if (e.kind === "goblin") return 80;
   if (e.kind === "bruiser") return 20;
   if (e.kind === "bat") return 15;
-  if (e.bossKind === "ironface") return 25;
-  if (e.bossKind === "cloud") return 35;
-  if (e.bossKind === "mothman") return 40;
-  if (e.bossKind === "anaconda") return 45;
-  if (e.bossKind === "kingkong") return 80;
-  if (e.bossKind === "firefox") return 170;
-  if (e.bossKind === "minotaur") return 60;
-  if (e.bossKind === "creeper") return 90;
-  if (e.bossKind === "sphinx") return 100;
-  if (e.bossKind === "cerberus") return 450;
+  if (e.bossKind) return BOSS_ATK[e.bossKind].contact;
   return 50;
+}
+
+function bossAtk(kind: BossKind) {
+  return BOSS_ATK[kind];
 }
 
 function applyVenomDot() {
@@ -3608,7 +3644,7 @@ function updateBoss(e: Enemy, dt: number) {
       const need = Math.min(10, Math.floor(10 - e.raining) + 1);
       while (e.rainSpawned < need && e.rainSpawned < 10) {
         const rx = player.x + rand(-40, 80);
-        spawnProjectile("rain", rx, 40, 0, 220, 15, 3.5, true, 8, 14);
+        spawnProjectile("rain", rx, 40, 0, 220, bossAtk("cloud").proj, 3.5, true, 8, 14);
         e.rainSpawned += 1;
       }
       if (e.raining <= 0) {
@@ -3639,7 +3675,7 @@ function updateBoss(e: Enemy, dt: number) {
         e.y + e.h / 2,
         e.facing * 240,
         30 + rand(-20, 40),
-        45,
+        bossAtk("mothman").proj,
         2.2,
         true,
         16,
@@ -3658,7 +3694,7 @@ function updateBoss(e: Enemy, dt: number) {
         e.y + 16,
         e.facing * 280,
         -80,
-        10,
+        bossAtk("anaconda").proj,
         2.2,
         true,
         14,
@@ -3686,7 +3722,7 @@ function updateBoss(e: Enemy, dt: number) {
         e.vx = 0;
         e.attackCd = 1.6;
         if (aabb(player, { x: e.x - 10, y: e.y, w: e.w + 20, h: e.h })) {
-          hurtPlayer(80, e.facing * 320);
+          hurtPlayer(bossAtk("kingkong").special, e.facing * 320);
         }
       }
     } else if (e.attackCd <= 0 && dist < 360) {
@@ -3706,7 +3742,7 @@ function updateBoss(e: Enemy, dt: number) {
           e.y + 24,
           e.facing * 300,
           -10,
-          200,
+          bossAtk("firefox").proj,
           1.6,
           true,
           22,
@@ -3724,7 +3760,7 @@ function updateBoss(e: Enemy, dt: number) {
     }
     if (e.phase === 10) {
       if (aabb(player, { x: e.x - 20, y: e.y + 10, w: e.w + 40, h: e.h })) {
-        hurtPlayer(170, e.facing * 280);
+        hurtPlayer(bossAtk("firefox").special, e.facing * 280);
       }
       if (e.attackCd <= 0) {
         e.phase = 1;
@@ -3743,12 +3779,12 @@ function updateBoss(e: Enemy, dt: number) {
     } else if (e.phase === 2) {
       e.x += e.vx * dt;
       e.attackCd -= dt;
-            // Horn charge — jumpable (only hits if player low)
+      // Horn charge — jumpable (only hits if player low)
       if (
         aabb(player, { x: e.x, y: e.y + 20, w: e.w, h: e.h - 20 }) &&
         player.y + player.h > e.y + 30
       ) {
-        hurtPlayer(235, e.facing * 340);
+        hurtPlayer(bossAtk("minotaur").special, e.facing * 340);
       }
       if (e.attackCd <= 0) {
         e.phase = 0;
@@ -3770,7 +3806,7 @@ function updateBoss(e: Enemy, dt: number) {
             e.y + 28,
             e.facing * 360,
             -20,
-            180,
+            bossAtk("minotaur").proj,
             2.2,
             true,
             18,
@@ -3797,7 +3833,7 @@ function updateBoss(e: Enemy, dt: number) {
           e.y + 20,
           e.facing * 280,
           40,
-          200,
+          bossAtk("creeper").proj,
           2.0,
           true,
           18,
@@ -3810,7 +3846,7 @@ function updateBoss(e: Enemy, dt: number) {
           e.y + 10,
           e.facing * 220,
           -120,
-          280,
+          bossAtk("creeper").special,
           2.4,
           true,
           20,
@@ -3823,7 +3859,7 @@ function updateBoss(e: Enemy, dt: number) {
           w: 40,
           h: 8,
           kind: "trap",
-          dmg: 250,
+          dmg: bossAtk("creeper").special,
           life: 3.5,
           tick: 0,
         });
@@ -3847,7 +3883,7 @@ function updateBoss(e: Enemy, dt: number) {
             GROUND_Y - 40,
             0,
             -20,
-            280,
+            bossAtk("sphinx").proj,
             1.8,
             true,
             10,
@@ -3861,7 +3897,7 @@ function updateBoss(e: Enemy, dt: number) {
           40,
           0,
           280,
-          300,
+          bossAtk("sphinx").proj,
           3.0,
           true,
           28,
@@ -3883,7 +3919,7 @@ function updateBoss(e: Enemy, dt: number) {
       e.telegraph -= dt;
       if (e.telegraph <= 0) {
         if (Math.abs(player.x - e.x) < 140 && player.y + player.h > e.y + 20) {
-          hurtPlayer(350, player.x < e.x ? -300 : 300);
+          hurtPlayer(bossAtk("sphinx").special, player.x < e.x ? -300 : 300);
         }
         burst(e.x + e.w / 2, e.y + e.h, "#c9a227", 16);
         shake = 14;
@@ -3914,7 +3950,7 @@ function updateBoss(e: Enemy, dt: number) {
           w: e.patrolR - e.patrolL + 120,
           h: 80,
           kind: "lava",
-          dmg: 500,
+          dmg: bossAtk("cerberus").special,
           life: 8,
           tick: 0,
         });
@@ -3936,7 +3972,7 @@ function updateBoss(e: Enemy, dt: number) {
           e.y + 30,
           e.facing * 260,
           0,
-          200,
+          bossAtk("cerberus").proj,
           1.5,
           true,
           18,
@@ -3949,7 +3985,7 @@ function updateBoss(e: Enemy, dt: number) {
     if (e.phase === 30) {
       e.x += e.vx * dt;
       e.attackCd -= dt;
-      if (aabb(player, e)) hurtPlayer(450, e.facing * 360);
+      if (aabb(player, e)) hurtPlayer(bossAtk("cerberus").contact, e.facing * 360);
       if (e.attackCd <= 0) {
         e.phase = 1;
         e.attackCd = 1.5;
@@ -3973,7 +4009,7 @@ function updateBoss(e: Enemy, dt: number) {
         shake = 12;
         burst(e.x + e.w / 2, e.y + e.h, "#c9a227", 14);
         if (Math.abs(player.x + player.w / 2 - (e.x + e.w / 2)) < 110) {
-          hurtPlayer(kind === "ironface" ? 40 : 80, player.x < e.x ? -280 : 280);
+          hurtPlayer(kind === "ironface" ? bossAtk("ironface").stomp : bossAtk("cerberus").stomp, player.x < e.x ? -280 : 280);
         }
       }
     }
@@ -4279,7 +4315,7 @@ function updateItems(_dt: number) {
       w: it.w,
       h: it.h,
     };
-        if (!aabb(player, body)) continue;
+    if (!aabb(player, body)) continue;
     it.taken = true;
     sfxPickup();
     if (it.kind === "coin") addCoins(1);
@@ -4363,7 +4399,6 @@ function updateProjectiles(dt: number) {
         }
       }
     }
-
     if (!p.alive) projectiles.splice(i, 1);
   }
 }
@@ -4415,12 +4450,14 @@ function tryOpenChest() {
   if (lootReveal) return true;
 
   chest.opened = true;
-  if (barChestSave) {
-    barChestSave.opened = true;
-  }
+  const save =
+    currentInterior && barChestSaves[currentInterior.id]
+      ? barChestSaves[currentInterior.id]!
+      : null;
+  if (save) save.opened = true;
   if (chest.isParchment || chest.type === "none") {
     parchmentShown = true;
-    if (barChestSave) barChestSave.parchmentShown = true;
+    if (save) save.parchmentShown = true;
     queueDialog([
       {
         name: "ROCKET RACCOON",
@@ -4443,30 +4480,9 @@ function tryOpenChest() {
   return true;
 }
 
-function tryHouseRocket() {
-  if (scene !== "interior" || !currentInterior || currentInterior.kind !== "house")
-    return false;
-  if (!houseRocketShown) return false;
-  const poster = { x: 680, y: 150, w: 110, h: 120 };
-  if (!aabb(player, { x: poster.x - 20, y: poster.y - 10, w: poster.w + 40, h: poster.h + 40 }))
-    return false;
-  queueDialog([
-    {
-      name: "ROCKET RACCOON",
-      text: "Ben Rocket Raccoon. Orta parmak. Anlaşıldı mı?",
-    },
-    {
-      name: "DUVAR YAZISI",
-      text: "Bu evde sandık yok. Loot için BAR’a git — anahtarla.",
-    },
-  ]);
-  return true;
-}
-
 function tryEnterDoor() {
   if (scene === "interior") {
     if (tryOpenChest()) return;
-    if (tryHouseRocket()) return;
     if (currentInterior && player.x < 140) {
       sfxDoor();
       scene = "world";
@@ -4509,26 +4525,16 @@ function tryEnterDoor() {
     player.vy = 0;
     camX = 0;
     updateHud();
-    if (def.kind === "bar") {
-      queueDialog([
-        {
-          name: "BARMEN",
-          text: "Silah ve iksir yalnız üst kattaki sandıktan. Masada bedava yok.",
-        },
-        {
-          name: "BARBAR",
-          text: "Bir bira daha… ve sen o sandığa tırman.",
-        },
-      ]);
-    } else {
-      queueDialog([
-        {
-          name: "???",
-          text: "Bu evde sandık yok. Üst kattaki postere bak — ROCKET RACCOON.",
-        },
-      ]);
-      showHint("Üst kata tırman · postere E");
-    }
+    queueDialog([
+      {
+        name: "BARMEN",
+        text: "Silah ve iksir yalnız üst kattaki sandıktan. Masada bedava yok.",
+      },
+      {
+        name: "BARBAR",
+        text: "Bir bira daha… ve sen o sandığa tırman.",
+      },
+    ]);
     return;
   }
 }
@@ -4737,10 +4743,17 @@ function handleInput(dt: number) {
     ) {
       showHint("↑ / E — sandığı aç");
     } else if (
-      houseRocketShown &&
-      aabb(player, { x: 660, y: 140, w: 150, h: 140 })
+      chest &&
+      chest.opened &&
+      parchmentShown &&
+      aabb(player, {
+        x: chest.x - 24,
+        y: chest.y - 16,
+        w: chest.w + 48,
+        h: chest.h + 32,
+      })
     ) {
-      showHint("↑ / E — ROCKET RACCOON");
+      showHint("Rocket Raccoon parşömeni");
     } else if (player.x < 150) {
       showHint("↑ / E — dışarı çık");
     }
@@ -4862,6 +4875,7 @@ function drawRocketRaccoon(px: number, py: number, big = false) {
     ctx.fillText("E — bak", px + 18, py + h + 28);
   }
 }
+
 function drawChestVisual(cx: number, cy: number, type: ChestType, opened: boolean) {
   const w = 56;
   const h = 44;
@@ -5180,16 +5194,6 @@ function drawInteriorDecor() {
         drawChestVisual(cx, cy, chest.type, chest.opened);
       }
     }
-  } else {
-    // house furniture
-    ctx.fillStyle = "#6a4a28";
-    ctx.fillRect(220, 330, 120, 14);
-    ctx.fillStyle = "#7ab0d8";
-    ctx.fillRect(160, 160, 70, 70);
-    // Rocket Raccoon wall poster upstairs (no chest)
-    if (houseRocketShown) {
-      drawRocketRaccoon(700, 155, true);
-    }
   }
 }
 
@@ -5286,6 +5290,397 @@ function drawHandPotion(x: number, y: number) {
   drawPotionBottle(x + 4, y + 12, color, 0.95, -0.15);
 }
 
+
+function limb(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  thick: number,
+  color: string,
+) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = (-dy / len) * (thick / 2);
+  const ny = (dx / len) * (thick / 2);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1 + nx, y1 + ny);
+  ctx.lineTo(x2 + nx, y2 + ny);
+  ctx.lineTo(x2 - nx, y2 - ny);
+  ctx.lineTo(x1 - nx, y1 - ny);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function softBlob(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  color: string,
+  rot = 0,
+) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(rx, 0);
+  for (let i = 1; i <= 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const jagged = 1 + Math.sin(a * 3) * 0.04;
+    ctx.lineTo(Math.cos(a) * rx * jagged, Math.sin(a) * ry * jagged);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBossArt(e: Enemy, x: number, y: number) {
+  const bk = e.bossKind ?? "ironface";
+  const f = e.facing >= 0 ? 1 : -1;
+  const cx = x + e.w / 2;
+  const footY = y + e.h;
+
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  softBlob(cx, footY + 2, e.w * 0.38, 6, "rgba(0,0,0,0.35)");
+
+  ctx.save();
+  ctx.translate(cx, 0);
+  ctx.scale(f, 1);
+  ctx.translate(-cx, 0);
+
+  if (bk === "anaconda") {
+    // Coiled serpent body — overlapping tapered segments, not a single oval
+    const segs = 14;
+    for (let i = 0; i < segs; i++) {
+      const t = i / (segs - 1);
+      const wave = Math.sin(time * 4 + i * 0.55) * 10;
+      const sx = x + 18 + t * (e.w - 40);
+      const sy = y + e.h * 0.55 + Math.sin(t * Math.PI * 2.2) * 14 + wave * 0.15;
+      const r = 16 - t * 9;
+      softBlob(sx, sy, r + 2, r * 0.75, i % 2 === 0 ? "#1f6b32" : "#2e8a42");
+      // belly stripe
+      softBlob(sx, sy + 3, r * 0.55, r * 0.28, "#c8e070");
+    }
+    // head
+    const hx = x + e.w - 22;
+    const hy = y + e.h * 0.42 + Math.sin(time * 4) * 3;
+    softBlob(hx, hy, 18, 14, "#246b34");
+    softBlob(hx + 10, hy + 2, 12, 9, "#1a5528");
+    // jaw
+    ctx.fillStyle = "#143d1c";
+    ctx.beginPath();
+    ctx.moveTo(hx + 8, hy + 6);
+    ctx.lineTo(hx + 26, hy + 10);
+    ctx.lineTo(hx + 8, hy + 14);
+    ctx.closePath();
+    ctx.fill();
+    // fangs
+    ctx.fillStyle = "#f4f0e6";
+    ctx.fillRect(hx + 16, hy + 7, 2, 5);
+    ctx.fillRect(hx + 20, hy + 8, 2, 4);
+    // eyes
+    ctx.fillStyle = "#ff3030";
+    softBlob(hx - 2, hy - 4, 3.5, 3, "#ff3030");
+    softBlob(hx + 6, hy - 5, 3.5, 3, "#ff3030");
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(hx - 2, hy - 5, 2, 2);
+    ctx.fillRect(hx + 6, hy - 6, 2, 2);
+    // forked tongue
+    ctx.strokeStyle = "#e04060";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(hx + 24, hy + 8);
+    ctx.lineTo(hx + 34, hy + 6);
+    ctx.moveTo(hx + 24, hy + 8);
+    ctx.lineTo(hx + 34, hy + 11);
+    ctx.stroke();
+  } else if (bk === "ironface") {
+    // Armored knight / iron giant
+    limb(cx - 14, y + 70, cx - 18, footY - 4, 10, "#2a3038");
+    limb(cx + 14, y + 70, cx + 18, footY - 4, 10, "#2a3038");
+    softBlob(cx - 18, footY - 2, 10, 5, "#1a1010");
+    softBlob(cx + 18, footY - 2, 10, 5, "#1a1010");
+    softBlob(cx, y + 52, 28, 32, "#3a4058");
+    // breastplate ridges
+    ctx.fillStyle = "#6a7080";
+    ctx.fillRect(cx - 18, y + 40, 36, 8);
+    ctx.fillRect(cx - 16, y + 54, 32, 7);
+    ctx.fillStyle = "#8a9098";
+    ctx.fillRect(cx - 14, y + 42, 28, 3);
+    // arms + fists
+    limb(cx - 26, y + 38, cx - 36, y + 62, 9, "#4a5060");
+    limb(cx + 26, y + 38, cx + 38, y + 58, 9, "#4a5060");
+    softBlob(cx - 38, y + 64, 8, 7, "#c09070");
+    softBlob(cx + 40, y + 60, 8, 7, "#c09070");
+    // iron mask face
+    softBlob(cx, y + 18, 20, 18, "#c09070");
+    softBlob(cx, y + 16, 18, 14, "#8a9098");
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(cx - 10, y + 12, 7, 5);
+    ctx.fillRect(cx + 3, y + 12, 7, 5);
+    ctx.fillStyle = "#ff3030";
+    ctx.fillRect(cx - 8, y + 13, 3, 3);
+    ctx.fillRect(cx + 5, y + 13, 3, 3);
+    ctx.fillStyle = "#2a3038";
+    ctx.fillRect(cx - 6, y + 22, 12, 3);
+    // helm crest
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(cx - 3, y - 2, 6, 10);
+  } else if (bk === "cloud") {
+    // Storm spirit: ragged cloud cloak + humanoid under
+    softBlob(cx - 22, y + 18, 20, 14, "#b8d4f0");
+    softBlob(cx, y + 10, 26, 18, "#d0e6f8");
+    softBlob(cx + 22, y + 18, 18, 13, "#a8c8e8");
+    softBlob(cx + 8, y + 6, 12, 9, "#eef6ff");
+    // rain wisps
+    ctx.strokeStyle = "rgba(120,180,255,0.55)";
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 5; i++) {
+      const rx = cx - 20 + i * 10;
+      ctx.beginPath();
+      ctx.moveTo(rx, y + 28);
+      ctx.lineTo(rx - 2, y + 42 + (i % 2) * 4);
+      ctx.stroke();
+    }
+    softBlob(cx, y + 48, 18, 24, "#5a80a8");
+    softBlob(cx, y + 36, 14, 12, "#c09070");
+    ctx.fillStyle = "#1a3048";
+    ctx.fillRect(cx - 7, y + 34, 4, 4);
+    ctx.fillRect(cx + 3, y + 34, 4, 4);
+    limb(cx - 12, y + 50, cx - 20, y + 72, 7, "#5a80a8");
+    limb(cx + 12, y + 50, cx + 18, y + 72, 7, "#5a80a8");
+  } else if (bk === "mothman") {
+    const flap = Math.sin(time * 10) * 12;
+    // moth wings with vein detail
+    ctx.fillStyle = "#5a4070";
+    ctx.beginPath();
+    ctx.moveTo(cx, y + 36);
+    ctx.quadraticCurveTo(cx - 50, y + 8 + flap, cx - 44, y + 48);
+    ctx.quadraticCurveTo(cx - 28, y + 56, cx, y + 44);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx, y + 36);
+    ctx.quadraticCurveTo(cx + 50, y + 8 - flap, cx + 44, y + 48);
+    ctx.quadraticCurveTo(cx + 28, y + 56, cx, y + 44);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(200,160,255,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, y + 38);
+    ctx.lineTo(cx - 36, y + 20 + flap * 0.5);
+    ctx.moveTo(cx + 8, y + 38);
+    ctx.lineTo(cx + 36, y + 20 - flap * 0.5);
+    ctx.stroke();
+    softBlob(cx, y + 50, 14, 26, "#3a2a48");
+    softBlob(cx, y + 22, 13, 14, "#c09070");
+    // glowing red eyes
+    softBlob(cx - 5, y + 20, 3, 3.5, "#ff4040");
+    softBlob(cx + 5, y + 20, 3, 3.5, "#ff4040");
+    // antennae
+    ctx.strokeStyle = "#2a1a30";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, y + 10);
+    ctx.quadraticCurveTo(cx - 14, y - 4, cx - 10, y - 8);
+    ctx.moveTo(cx + 4, y + 10);
+    ctx.quadraticCurveTo(cx + 14, y - 4, cx + 10, y - 8);
+    ctx.stroke();
+    limb(cx - 8, y + 70, cx - 12, footY - 2, 6, "#3a2a48");
+    limb(cx + 8, y + 70, cx + 12, footY - 2, 6, "#3a2a48");
+  } else if (bk === "kingkong") {
+    // Gorilla stance
+    limb(cx - 10, y + 78, cx - 16, footY - 2, 12, "#4a2e1e");
+    limb(cx + 10, y + 78, cx + 16, footY - 2, 12, "#4a2e1e");
+        softBlob(cx, y + 58, 30, 34, "#5a3a28");
+    softBlob(cx, y + 62, 18, 16, "#3a2418"); // chest darker
+    // massive arms
+    limb(cx - 28, y + 40, cx - 42, y + 78, 14, "#5a3a28");
+    limb(cx + 28, y + 40, cx + 44, y + 72, 14, "#5a3a28");
+    softBlob(cx - 44, y + 82, 11, 9, "#3a2418");
+    softBlob(cx + 46, y + 76, 11, 9, "#3a2418");
+    // head
+    softBlob(cx, y + 22, 20, 20, "#6a4a34");
+    softBlob(cx, y + 28, 14, 10, "#8a6a50"); // muzzle
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(cx - 10, y + 16, 5, 5);
+    ctx.fillRect(cx + 5, y + 16, 5, 5);
+    ctx.fillStyle = "#c09070";
+    ctx.fillRect(cx - 6, y + 30, 12, 4);
+    // brow ridge
+    ctx.fillStyle = "#3a2418";
+    ctx.fillRect(cx - 14, y + 12, 28, 4);
+  } else if (bk === "firefox") {
+    // Fox / fire beast
+    limb(cx - 12, y + 55, cx - 16, footY - 2, 8, "#a04018");
+    limb(cx + 10, y + 55, cx + 16, footY - 2, 8, "#a04018");
+    softBlob(cx, y + 42, 24, 22, "#c05020");
+    softBlob(cx - 4, y + 44, 10, 10, "#ff9050");
+    // bushy flaming tail
+    for (let i = 0; i < 4; i++) {
+      const tw = Math.sin(time * 8 + i) * 5;
+      softBlob(
+        cx - 28 - i * 8,
+        y + 40 + i * 4 + tw,
+        12 - i,
+        9 - i * 0.5,
+        i % 2 === 0 ? "#ffd24a" : "#ff6020",
+      );
+    }
+    softBlob(cx + 6, y + 20, 16, 14, "#e07040");
+    softBlob(cx + 16, y + 24, 10, 7, "#ff9050"); // snout
+    softBlob(cx + 4, y + 10, 5, 6, "#c05020"); // ear
+    softBlob(cx + 14, y + 8, 5, 6, "#c05020");
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(cx + 2, y + 18, 3, 3);
+    ctx.fillRect(cx + 10, y + 18, 3, 3);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(cx + 18, y + 22, 3, 2);
+  } else if (bk === "minotaur") {
+    limb(cx - 12, y + 72, cx - 16, footY - 2, 11, "#5a4030");
+    limb(cx + 12, y + 72, cx + 16, footY - 2, 11, "#5a4030");
+    softBlob(cx, y + 55, 26, 30, "#6a5030");
+    softBlob(cx, y + 58, 16, 12, "#4a3820");
+    // arms
+    limb(cx - 24, y + 40, cx - 34, y + 66, 10, "#6a5030");
+    limb(cx + 24, y + 40, cx + 36, y + 64, 10, "#6a5030");
+    softBlob(cx, y + 22, 18, 18, "#c09070");
+    // bull horns
+    ctx.fillStyle = "#e8e0d0";
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, y + 14);
+    ctx.quadraticCurveTo(cx - 28, y - 6, cx - 22, y + 18);
+    ctx.quadraticCurveTo(cx - 16, y + 16, cx - 12, y + 14);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + 12, y + 14);
+    ctx.quadraticCurveTo(cx + 28, y - 6, cx + 22, y + 18);
+    ctx.quadraticCurveTo(cx + 16, y + 16, cx + 12, y + 14);
+    ctx.fill();
+    // snout + ring
+    softBlob(cx, y + 28, 10, 7, "#a07858");
+    ctx.strokeStyle = "#c9a227";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, y + 32, 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(cx - 8, y + 18, 4, 4);
+    ctx.fillRect(cx + 4, y + 18, 4, 4);
+  } else if (bk === "creeper") {
+    const flap = Math.sin(time * 14) * 10;
+    // torn cape / shadow wings
+    ctx.fillStyle = "#2a3828";
+    ctx.beginPath();
+    ctx.moveTo(cx, y + 30);
+    ctx.quadraticCurveTo(cx - 40, y + 4 + flap, cx - 30, y + 50);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx, y + 30);
+    ctx.quadraticCurveTo(cx + 40, y + 4 - flap, cx + 30, y + 50);
+    ctx.fill();
+    softBlob(cx, y + 48, 16, 28, "#1a2818");
+    softBlob(cx, y + 24, 14, 14, "#2a3828");
+    // eerie grin
+    ctx.fillStyle = "#80ff60";
+    ctx.fillRect(cx - 8, y + 22, 4, 4);
+    ctx.fillRect(cx + 4, y + 22, 4, 4);
+    ctx.fillStyle = "#4a6840";
+    ctx.fillRect(cx - 8, y + 32, 16, 3);
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(cx - 7 + i * 4, y + 32, 2, 5);
+    }
+    limb(cx - 6, y + 70, cx - 10, footY - 2, 5, "#1a2818");
+    limb(cx + 6, y + 70, cx + 10, footY - 2, 5, "#1a2818");
+  } else if (bk === "sphinx") {
+    // Lion body + human head + headdress
+    softBlob(cx + 10, y + 58, 40, 22, "#c9a060");
+    softBlob(cx - 10, y + 62, 18, 16, "#b89050");
+    // legs
+    limb(cx - 20, y + 70, cx - 24, footY - 2, 9, "#b89050");
+    limb(cx + 8, y + 70, cx + 6, footY - 2, 9, "#b89050");
+    limb(cx + 28, y + 68, cx + 34, footY - 2, 8, "#b89050");
+    // tail
+    ctx.strokeStyle = "#c9a060";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx + 48, y + 58);
+    ctx.quadraticCurveTo(cx + 70, y + 40, cx + 66, y + 70);
+    ctx.stroke();
+    softBlob(cx + 66, y + 72, 6, 5, "#8a6840");
+    // human head + nemes headdress
+    softBlob(cx - 18, y + 28, 16, 18, "#e8c090");
+    ctx.fillStyle = "#4a2030";
+    ctx.beginPath();
+    ctx.moveTo(cx - 36, y + 18);
+    ctx.lineTo(cx - 18, y + 8);
+    ctx.lineTo(cx - 2, y + 18);
+    ctx.lineTo(cx - 6, y + 48);
+    ctx.lineTo(cx - 32, y + 48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(cx - 34, y + 20, 30, 3);
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(cx - 24, y + 26, 4, 4);
+    ctx.fillRect(cx - 14, y + 26, 4, 4);
+  } else if (bk === "cerberus") {
+    // Three-headed hellhound
+    limb(cx - 18, y + 78, cx - 28, footY - 2, 12, "#3a1818");
+    limb(cx + 18, y + 78, cx + 28, footY - 2, 12, "#3a1818");
+    softBlob(cx, y + 62, 36, 28, "#4a2028");
+    softBlob(cx, y + 66, 20, 14, "#2a1014");
+    // shoulders / front paws
+    limb(cx - 30, y + 55, cx - 48, y + 82, 11, "#4a2028");
+    limb(cx + 30, y + 55, cx + 48, y + 80, 11, "#4a2028");
+    const heads = [-34, 0, 34];
+    for (let i = 0; i < 3; i++) {
+      const hx = cx + heads[i]!;
+      const dead = e.headHp && e.headHp[i]! <= 0;
+      const hy = y + 22 + (i === 1 ? -4 : 2);
+      softBlob(hx, hy, 16, 15, dead ? "#2a1010" : "#6a3038");
+      if (!dead) {
+        softBlob(hx + 8, hy + 4, 9, 7, "#8a4048");
+        softBlob(hx - 4, hy - 2, 3, 3, "#ff4040");
+        softBlob(hx + 4, hy - 2, 3, 3, "#ff4040");
+        // ears
+        softBlob(hx - 10, hy - 12, 4, 6, "#4a2028");
+        softBlob(hx + 6, hy - 12, 4, 6, "#4a2028");
+        ctx.fillStyle = "#f0c0a0";
+        ctx.fillRect(hx + 6, hy + 6, 6, 3);
+      }
+      if (e.headHp) {
+        ctx.fillStyle = "#1a1010";
+        ctx.fillRect(hx - 14, hy - 22, 28, 4);
+        ctx.fillStyle = dead ? "#333" : "#e04040";
+        ctx.fillRect(hx - 14, hy - 22, 28 * (e.headHp[i]! / 1800), 4);
+      }
+    }
+  } else {
+    softBlob(cx, y + e.h / 2, e.w * 0.35, e.h * 0.4, "#5a6578");
+  }
+
+  ctx.restore();
+
+  // HP / name (not flipped)
+  if (bk !== "cerberus") {
+    const bw = e.w - 10;
+    ctx.fillStyle = "#1a1010";
+    ctx.fillRect(x + 5, y - 22, bw, 6);
+    ctx.fillStyle = "#e04040";
+    ctx.fillRect(x + 5, y - 22, bw * (e.hp / e.maxHp), 6);
+  }
+  if (e.telegraph > 0) {
+    ctx.fillStyle = "rgba(255,120,40,0.25)";
+    ctx.fillRect(x - 8, y - 8, e.w + 16, e.h + 8);
+  }
+  ctx.fillStyle = "#f5c518";
+  ctx.font = "8px monospace";
+  ctx.fillText(e.name, x, y - 28);
+}
+
 function drawPlayer() {
   const x = player.x - camX;
   const y = player.y;
@@ -5297,9 +5692,7 @@ function drawPlayer() {
 
   if (flyTimer > 0) {
     ctx.fillStyle = `rgba(74,168,255,${0.25 + Math.sin(time * 10) * 0.15})`;
-    ctx.beginPath();
-    ctx.ellipse(x + player.w / 2, y + player.h / 2, 28, 36, 0, 0, Math.PI * 2);
-    ctx.fill();
+    softBlob(x + player.w / 2, y + player.h / 2, 28, 36, `rgba(74,168,255,${0.25 + Math.sin(time * 10) * 0.15})`);
   }
   if (shieldTimer > 0 && shieldHp > 0) {
     ctx.strokeStyle = `rgba(255,122,217,${0.4 + Math.sin(time * 8) * 0.2})`;
@@ -5316,41 +5709,63 @@ function drawPlayer() {
     ctx.translate(-(x + player.w / 2), 0);
   }
 
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  const cos = resolveLook();
+  const px = x + player.w / 2;
+  const legSwing = onGround
+    ? Math.sin(time * (Math.abs(player.vx) > 20 ? 14 : 0)) * 4
+    : 0;
+
+  // shadow
+  softBlob(px, y + player.h + 2, 13, 4, "rgba(0,0,0,0.28)");
+
+  // boots
+  const boot = armor.boots ? "#8a9098" : cos.boots;
+  softBlob(px - 7, y + 48, 6, 4, boot);
+  softBlob(px + 7, y + 48, 6, 4, boot);
+  ctx.fillStyle = boot;
+  ctx.fillRect(px - 10, y + 44, 8, 6);
+  ctx.fillRect(px + 2, y + 44, 8, 6);
+
+  // legs
+  const pant = armor.pants ? "#3a5068" : cos.pants;
+  limb(px - 5, y + 30, px - 7, y + 46 + legSwing, 7, pant);
+  limb(px + 5, y + 30, px + 7, y + 46 - legSwing, 7, pant);
+
+  // cape
+  ctx.fillStyle = cos.cape;
   ctx.beginPath();
-  ctx.ellipse(x + 15, y + player.h + 2, 13, 4, 0, 0, Math.PI * 2);
+  ctx.moveTo(px - 10, y + 16);
+  ctx.quadraticCurveTo(px - 18, y + 28, px - 12, y + 42);
+  ctx.lineTo(px - 6, y + 18);
   ctx.fill();
 
-  const cos = resolveLook();
-  ctx.fillStyle = armor.boots ? "#8a9098" : cos.boots;
-  ctx.fillRect(x + 5, y + 44, 9, 8);
-  ctx.fillRect(x + 17, y + 44, 9, 8);
-
-  const legSwing = onGround
-    ? Math.sin(time * (Math.abs(player.vx) > 20 ? 14 : 0)) * 3
-    : 0;
-  ctx.fillStyle = armor.pants ? "#3a5068" : cos.pants;
-  ctx.fillRect(x + 7, y + 30, 8, 15 + legSwing);
-  ctx.fillRect(x + 16, y + 30, 8, 15 - legSwing);
-
-  ctx.fillStyle = armor.chest ? "#6a7888" : cos.body;
-  ctx.fillRect(x + 5, y + 14, 20, 18);
+  // torso
+  const body = armor.chest ? "#6a7888" : cos.body;
+  softBlob(px, y + 24, 11, 14, body);
   ctx.fillStyle = cos.accent;
-  ctx.fillRect(x + 5, y + 20, 20, 3);
+  ctx.fillRect(px - 10, y + 22, 20, 3);
 
-  ctx.fillStyle = cos.cape;
-  ctx.fillRect(x + 2, y + 16, 5, 22);
+  // arms
+  const skin = cos.skin;
+  limb(px - 10, y + 18, px - 14, y + 32, 5, skin);
+  limb(px + 10, y + 18, px + (attackT > 0 ? 22 : 14), y + (attackT > 0 ? 22 : 32), 5, skin);
 
-  ctx.fillStyle = cos.skin;
-  ctx.fillRect(x + 8, y + 2, 14, 13);
-  ctx.fillStyle = armor.helm ? "#a0a8b0" : cos.helm;
-  ctx.fillRect(x + 6, y - 2, 18, 8);
-  ctx.fillRect(x + 10, y - 8, 10, 8);
+  // head
+  softBlob(px, y + 8, 9, 10, skin);
+  // hair / helm
+  const helmCol = armor.helm ? "#a0a8b0" : cos.helm;
+  softBlob(px, y + 2, 10, 7, helmCol);
+  ctx.fillStyle = helmCol;
+  ctx.fillRect(px - 8, y - 4, 16, 6);
   ctx.fillStyle = cos.accent;
-  ctx.fillRect(x + 6, y + 4, 18, 2);
+  ctx.fillRect(px - 9, y + 5, 18, 2);
+  // eyes
   ctx.fillStyle = "#1a1a22";
-    ctx.fillRect(x + 10, y + 7, 3, 3);
-  ctx.fillRect(x + 16, y + 7, 3, 3);
+  ctx.fillRect(px - 4, y + 8, 3, 3);
+  ctx.fillRect(px + 2, y + 8, 3, 3);
+  // mouth
+  ctx.fillStyle = "#8a5040";
+  ctx.fillRect(px - 2, y + 13, 4, 1);
 
   applyCosmeticOverlays(ctx, x, y, facing);
 
@@ -5392,26 +5807,19 @@ function drawPlayer() {
     ctx.fillStyle = "#6a4080";
     ctx.fillRect(x + 26, y + 4, 4, 30);
     ctx.fillStyle = "#b44dff";
-    ctx.beginPath();
-    ctx.arc(x + 28, y + 4, 7, 0, Math.PI * 2);
-    ctx.fill();
+    softBlob(x + 28, y + 4, 7, 7, "#b44dff");
   } else if (swinging) {
-    ctx.fillStyle = "#e8b896";
-    ctx.fillRect(x + 22, y + 16, 20, 7);
+    softBlob(x + 30, y + 20, 8, 5, "#e8b896");
   } else {
-    ctx.fillStyle = "#e8b896";
-    ctx.fillRect(x + 22, y + 16, 7, 12);
+    softBlob(x + 26, y + 22, 4, 6, "#e8b896");
   }
 
-  // Enchanted weapon sparkle
   if (wpn !== "fist" && weaponEnchanted[wpn]) {
     ctx.fillStyle = `rgba(180,77,255,${0.5 + Math.sin(time * 12) * 0.4})`;
     ctx.fillRect(x + 26, y + 12, 3, 3);
     ctx.fillRect(x + 32, y + 20, 2, 2);
-    ctx.fillRect(x + 24, y + 24, 2, 2);
   }
 
-  // Enchanted armor sparkle
   for (const slot of ["helm", "chest", "pants", "boots"] as ArmorSlot[]) {
     if (armor[slot] && armorEnchant[slot] > 0) {
       ctx.fillStyle = `rgba(180,77,255,${0.35 + Math.sin(time * 9 + armorEnchant[slot] * 10) * 0.25})`;
@@ -5436,290 +5844,48 @@ function drawEnemy(e: Enemy) {
   if (e.unhittable) ctx.globalAlpha = 0.55;
 
   if (e.kind === "goblin") {
-    ctx.fillStyle = "#2a4a28";
-    ctx.fillRect(x + 6, y + 36, 8, 8);
-    ctx.fillRect(x + 18, y + 36, 8, 8);
-    ctx.fillStyle = "#3d7a3a";
-    ctx.fillRect(x + 5, y + 14, 22, 24);
-    ctx.fillStyle = "#6aaa58";
-    ctx.fillRect(x + 8, y + 2, 16, 14);
+    softBlob(x + 15, y + 40, 7, 5, "#2a4a28");
+    softBlob(x + 10, y + 40, 5, 4, "#2a4a28");
+    softBlob(x + 20, y + 40, 5, 4, "#2a4a28");
+    softBlob(x + 15, y + 26, 11, 12, "#3d7a3a");
+    softBlob(x + 15, y + 10, 9, 8, "#6aaa58");
+    // ears
+    softBlob(x + 6, y + 6, 3, 5, "#6aaa58");
+    softBlob(x + 24, y + 6, 3, 5, "#6aaa58");
     ctx.fillStyle = "#1a2a18";
-    ctx.fillRect(x + 10, y + 6, 3, 3);
-    ctx.fillRect(x + 18, y + 6, 3, 3);
+    ctx.fillRect(x + 11, y + 8, 3, 3);
+    ctx.fillRect(x + 17, y + 8, 3, 3);
   } else if (e.kind === "bat") {
     const flap = Math.sin(time * 12) * 6;
     ctx.fillStyle = "#6a4a8a";
     ctx.beginPath();
     ctx.moveTo(x + 14, y + 10);
-    ctx.lineTo(x - 6, y + 4 + flap);
-    ctx.lineTo(x + 8, y + 14);
+    ctx.quadraticCurveTo(x - 4, y + 2 + flap, x + 8, y + 16);
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(x + 14, y + 10);
-    ctx.lineTo(x + 34, y + 4 - flap);
-    ctx.lineTo(x + 20, y + 14);
+    ctx.quadraticCurveTo(x + 32, y + 2 - flap, x + 20, y + 16);
     ctx.fill();
-    ctx.fillStyle = "#2a1a3a";
-    ctx.fillRect(x + 10, y + 6, 12, 10);
+    softBlob(x + 14, y + 12, 7, 6, "#2a1a3a");
+    ctx.fillStyle = "#ff6060";
+    ctx.fillRect(x + 11, y + 10, 2, 2);
+    ctx.fillRect(x + 16, y + 10, 2, 2);
   } else if (e.kind === "bruiser") {
-    // stocky club-wielding thug
-    ctx.fillStyle = "#3a2a48";
-    ctx.fillRect(x + 6, y + 38, 9, 10);
-    ctx.fillRect(x + 20, y + 38, 9, 10);
-    ctx.fillStyle = "#5a4068";
-    ctx.fillRect(x + 5, y + 16, 24, 24);
-    ctx.fillStyle = "#c09070";
-    ctx.fillRect(x + 8, y + 2, 18, 15);
+    softBlob(x + 16, y + 42, 8, 5, "#3a2a48");
+    softBlob(x + 10, y + 42, 5, 4, "#3a2a48");
+    softBlob(x + 22, y + 42, 5, 4, "#3a2a48");
+    softBlob(x + 16, y + 28, 13, 14, "#5a4068");
+    softBlob(x + 16, y + 10, 10, 10, "#c09070");
     ctx.fillStyle = "#2a1a28";
-    ctx.fillRect(x + 11, y + 7, 3, 3);
-    ctx.fillRect(x + 19, y + 7, 3, 3);
+    ctx.fillRect(x + 12, y + 8, 3, 3);
+    ctx.fillRect(x + 18, y + 8, 3, 3);
     ctx.fillStyle = "#8a3040";
-    ctx.fillRect(x + 12, y + 12, 10, 2);
-    // held spiked club (20 dmg item)
+    ctx.fillRect(x + 12, y + 14, 10, 2);
     const handX = e.facing >= 0 ? x + 26 : x - 4;
-    ctx.fillStyle = "#6a4020";
-    ctx.fillRect(handX, y + 14, 5, 22);
-    ctx.fillStyle = "#8a9098";
-    ctx.beginPath();
-    ctx.arc(handX + 2.5, y + 12, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#c0c8d0";
-    ctx.fillRect(handX, y + 6, 3, 3);
-    ctx.fillRect(handX + 3, y + 9, 3, 3);
-    ctx.fillRect(handX - 1, y + 11, 3, 3);
+    limb(handX, y + 18, handX, y + 36, 5, "#6a4020");
+    softBlob(handX, y + 14, 7, 7, "#8a9098");
   } else {
-    const bk = e.bossKind ?? "ironface";
-    // ground contact shadow
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.beginPath();
-    ctx.ellipse(x + e.w / 2, y + e.h + 2, e.w * 0.42, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const bodyColor: Record<BossKind, string> = {
-      ironface: "#3a4058",
-      cloud: "#6a90b8",
-      mothman: "#4a3a58",
-      anaconda: "#2e7a3a",
-      kingkong: "#5a3a28",
-      firefox: "#c05020",
-      minotaur: "#6a5030",
-      creeper: "#1a2818",
-      sphinx: "#c9a060",
-      cerberus: "#4a2028",
-    };
-
-    if (bk === "anaconda") {
-      ctx.fillStyle = bodyColor.anaconda;
-      ctx.beginPath();
-      ctx.ellipse(
-        x + e.w * 0.55,
-        y + e.h * 0.55,
-        e.w * 0.48,
-        e.h * 0.42,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.fillStyle = "#1a4a22";
-      ctx.beginPath();
-      ctx.ellipse(x + e.w * 0.35, y + e.h * 0.5, e.w * 0.22, e.h * 0.28, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ff3030";
-      ctx.fillRect(x + 8, y + 14, 5, 5);
-      ctx.fillRect(x + 18, y + 14, 5, 5);
-      ctx.fillStyle = "#f0e080";
-      ctx.fillRect(x + 4, y + 22, 10, 3);
-    } else if (bk === "mothman") {
-      const flap = Math.sin(time * 10) * 10;
-      ctx.fillStyle = "#6a5080";
-      ctx.beginPath();
-      ctx.moveTo(x + e.w / 2, y + 28);
-      ctx.lineTo(x - 18, y + 10 + flap);
-      ctx.lineTo(x + 10, y + 40);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + e.w / 2, y + 28);
-      ctx.lineTo(x + e.w + 18, y + 10 - flap);
-      ctx.lineTo(x + e.w - 10, y + 40);
-      ctx.fill();
-      ctx.fillStyle = bodyColor.mothman;
-      ctx.fillRect(x + 18, y + 20, e.w - 36, e.h - 28);
-      ctx.fillStyle = "#c09070";
-      ctx.fillRect(x + 22, y + 4, e.w - 44, 20);
-      ctx.fillStyle = "#1a1018";
-      ctx.fillRect(x + 26, y + 10, 5, 5);
-      ctx.fillRect(x + e.w - 36, y + 10, 5, 5);
-    } else if (bk === "firefox") {
-      ctx.fillStyle = bodyColor.firefox;
-      ctx.fillRect(x + 10, y + 20, e.w - 20, e.h - 28);
-      ctx.fillStyle = "#ffd24a";
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(x + e.w - 8, y + 30 + i * 10);
-        ctx.lineTo(x + e.w + 18, y + 20 + i * 12 + Math.sin(time * 8 + i) * 4);
-        ctx.lineTo(x + e.w - 4, y + 38 + i * 8);
-        ctx.fill();
-      }
-      ctx.fillStyle = "#ffe0a0";
-      ctx.fillRect(x + 16, y + 4, e.w - 40, 20);
-      ctx.fillStyle = "#ff3030";
-      ctx.fillRect(x + 22, y + 10, 5, 5);
-      ctx.fillRect(x + e.w - 36, y + 10, 5, 5);
-      // snout
-      ctx.fillStyle = "#ff9050";
-      ctx.fillRect(x + e.w / 2 - 6, y + 18, 12, 8);
-    } else if (bk === "kingkong") {
-      ctx.fillStyle = bodyColor.kingkong;
-      ctx.fillRect(x + 8, y + 28, e.w - 16, e.h - 40);
-      ctx.fillRect(x + 4, y + 40, 16, 28);
-      ctx.fillRect(x + e.w - 20, y + 40, 16, 28);
-      ctx.fillStyle = "#3a2418";
-      ctx.fillRect(x + 14, y + 36, e.w - 28, 16);
-      ctx.fillStyle = "#8a6a50";
-      ctx.fillRect(x + 20, y + 4, e.w - 40, 28);
-      ctx.fillStyle = "#1a1010";
-      ctx.fillRect(x + 28, y + 14, 6, 6);
-      ctx.fillRect(x + e.w - 34, y + 14, 6, 6);
-      ctx.fillStyle = "#c09070";
-      ctx.fillRect(x + e.w / 2 - 8, y + 22, 16, 6);
-    } else if (bk === "creeper") {
-      const flap = Math.sin(time * 14) * 8;
-      ctx.fillStyle = "#3a5030";
-      ctx.beginPath();
-      ctx.moveTo(x + e.w / 2, y + 20);
-      ctx.lineTo(x - 8, y + 8 + flap);
-      ctx.lineTo(x + 12, y + 30);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + e.w / 2, y + 20);
-      ctx.lineTo(x + e.w + 8, y + 8 - flap);
-      ctx.lineTo(x + e.w - 12, y + 30);
-      ctx.fill();
-      ctx.fillStyle = bodyColor.creeper;
-      ctx.fillRect(x + 14, y + 16, e.w - 28, e.h - 28);
-      ctx.fillStyle = "#80ff60";
-      ctx.fillRect(x + 22, y + 24, 5, 5);
-      ctx.fillRect(x + e.w - 27, y + 24, 5, 5);
-      ctx.fillStyle = "#4a6840";
-      ctx.fillRect(x + 20, y + 36, e.w - 40, 8);
-    } else if (bk === "sphinx") {
-      ctx.fillStyle = bodyColor.sphinx;
-      ctx.fillRect(x + 10, y + 30, e.w - 20, e.h - 40);
-      ctx.fillRect(x + 20, y + 8, e.w - 50, 28);
-      ctx.fillStyle = "#8a6840";
-      ctx.beginPath();
-      ctx.moveTo(x + e.w - 20, y + 40);
-      ctx.lineTo(x + e.w + 20, y + 50);
-      ctx.lineTo(x + e.w - 10, y + 70);
-      ctx.fill();
-      // headdress stripes
-      ctx.fillStyle = "#4a2030";
-      ctx.fillRect(x + 18, y + 6, e.w - 48, 6);
-      ctx.fillStyle = "#c9a227";
-      ctx.fillRect(x + 18, y + 12, e.w - 48, 4);
-      ctx.fillStyle = "#1a1010";
-      ctx.fillRect(x + 28, y + 16, 5, 5);
-    } else if (bk === "cerberus") {
-      ctx.fillStyle = bodyColor.cerberus;
-      ctx.fillRect(x + 16, y + 36, e.w - 32, e.h - 44);
-      // muscular torso detail
-      ctx.fillStyle = "#2a1014";
-      ctx.fillRect(x + 28, y + 44, e.w - 56, 20);
-      const heads = [0.18, 0.5, 0.82];
-      for (let i = 0; i < 3; i++) {
-        const hx = x + e.w * heads[i]! - 14;
-        const dead = e.headHp && e.headHp[i]! <= 0;
-        ctx.fillStyle = dead ? "#2a1010" : "#6a3038";
-        ctx.fillRect(hx, y + 4, 28, 36);
-        if (!dead) {
-          ctx.fillStyle = "#ff4040";
-          ctx.fillRect(hx + 6, y + 16, 5, 5);
-          ctx.fillRect(hx + 16, y + 16, 5, 5);
-          ctx.fillStyle = "#f0c0a0";
-          ctx.fillRect(hx + 10, y + 26, 8, 5);
-        }
-        if (e.headHp) {
-          ctx.fillStyle = "#1a1010";
-          ctx.fillRect(hx, y - 8 - i * 2, 28, 4);
-          ctx.fillStyle = dead ? "#333" : "#e04040";
-          ctx.fillRect(hx, y - 8 - i * 2, 28 * (e.headHp[i]! / 1800), 4);
-        }
-      }
-    } else if (bk === "minotaur") {
-      ctx.fillStyle = bodyColor.minotaur;
-      ctx.fillRect(x + 10, y + 28, e.w - 20, e.h - 36);
-      ctx.fillStyle = "#4a3820";
-      ctx.fillRect(x + 16, y + 40, e.w - 32, 18);
-      ctx.fillStyle = "#c09070";
-      ctx.fillRect(x + 18, y + 6, e.w - 36, 26);
-      ctx.fillStyle = "#e8e0d0";
-      ctx.beginPath();
-      ctx.moveTo(x + 8, y + 10);
-      ctx.lineTo(x - 6, y - 10);
-      ctx.lineTo(x + 16, y + 8);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + e.w - 8, y + 10);
-      ctx.lineTo(x + e.w + 6, y - 10);
-      ctx.lineTo(x + e.w - 16, y + 8);
-      ctx.fill();
-      ctx.fillStyle = "#1a1010";
-      ctx.fillRect(x + 24, y + 14, 5, 5);
-      ctx.fillRect(x + e.w - 34, y + 14, 5, 5);
-    } else if (bk === "cloud") {
-      ctx.fillStyle = "#a8c8e8";
-      ctx.beginPath();
-      ctx.arc(x + 18, y + 16, 14, 0, Math.PI * 2);
-      ctx.arc(x + e.w / 2, y + 10, 18, 0, Math.PI * 2);
-      ctx.arc(x + e.w - 18, y + 16, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#d8e8f8";
-      ctx.beginPath();
-      ctx.arc(x + e.w / 2 - 8, y + 8, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = bodyColor.cloud;
-      ctx.fillRect(x + 14, y + 28, e.w - 28, e.h - 36);
-      ctx.fillStyle = "#1a3048";
-      ctx.fillRect(x + 22, y + 36, 6, 6);
-      ctx.fillRect(x + e.w - 30, y + 36, 6, 6);
-    } else {
-      // ironface — armored giant
-      ctx.fillStyle = "#1a1010";
-      ctx.fillRect(x + 10, y + e.h - 12, 16, 12);
-      ctx.fillRect(x + e.w - 26, y + e.h - 12, 16, 12);
-      ctx.fillStyle = bodyColor[bk];
-      ctx.fillRect(x + 6, y + 24, e.w - 12, e.h - 36);
-      // armor plates
-      ctx.fillStyle = "#6a7080";
-      ctx.fillRect(x + 10, y + 28, e.w - 20, 12);
-      ctx.fillRect(x + 12, y + 44, e.w - 24, 10);
-      ctx.fillStyle = "#c09070";
-      ctx.fillRect(x + 14, y + 2, e.w - 28, 26);
-      ctx.fillStyle = "#8a9098";
-      ctx.fillRect(x + 16, y + 8, e.w - 32, 14);
-      ctx.fillStyle = "#2a3038";
-      ctx.fillRect(x + 20, y + 12, 8, 6);
-      ctx.fillRect(x + e.w - 28, y + 12, 8, 6);
-      ctx.fillStyle = "#ff3030";
-      ctx.fillRect(x + 22, y + 13, 4, 4);
-      ctx.fillRect(x + e.w - 26, y + 13, 4, 4);
-    }
-
-    if (e.telegraph > 0) {
-      ctx.fillStyle = "rgba(255,120,40,0.35)";
-      ctx.fillRect(x - 8, y - 8, e.w + 16, e.h + 8);
-    }
-    if (bk !== "cerberus") {
-      const bw = e.w - 10;
-      ctx.fillStyle = "#1a1010";
-      ctx.fillRect(x + 5, y - 22, bw, 6);
-      ctx.fillStyle = "#e04040";
-      ctx.fillRect(x + 5, y - 22, bw * (e.hp / e.maxHp), 6);
-    }
-    ctx.fillStyle = "#f5c518";
-    ctx.font = "8px monospace";
-    ctx.fillText(e.name, x, y - 28);
+    drawBossArt(e, x, y);
   }
   ctx.restore();
 }
@@ -5773,6 +5939,7 @@ function drawHazards() {
     }
   }
 }
+
 function drawPlatTraps() {
   for (const t of platTraps) {
     const x = t.x - camX;
@@ -6035,8 +6202,7 @@ function resetGame() {
   pourAnimT = 0;
   potionBusy = false;
   lootReveal = null;
-  houseRocketShown = false;
-  barChestSave = null;
+  barChestSaves = {};
   projectiles.length = 0;
   hazards.length = 0;
   platTraps.length = 0;
@@ -6251,6 +6417,17 @@ document.querySelector("#btn-shop-close")!.addEventListener("click", (e) => {
 shopPanel.addEventListener("pointerdown", (e) => {
   if (e.target === shopPanel) closeShop();
 });
+document.querySelector("#btn-settings-open")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  openSettings();
+});
+document.querySelector("#btn-settings-close")!.addEventListener("click", (e) => {
+  e.preventDefault();
+  closeSettings();
+});
+settingsPanel.addEventListener("pointerdown", (e) => {
+  if (e.target === settingsPanel) closeSettings();
+});
 document.querySelector("#btn-lobby")!.addEventListener("click", (e) => {
   e.preventDefault();
   openLobby();
@@ -6302,6 +6479,7 @@ friendSearchInput.addEventListener("keydown", (e) => {
     searchFriends();
   }
 });
+
 function bindHold(sel: string, key: string) {
   const el = document.querySelector<HTMLElement>(sel)!;
   const on = (ev: PointerEvent) => {
