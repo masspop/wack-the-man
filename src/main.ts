@@ -2290,7 +2290,7 @@ function rollChestLoot(type: Exclude<ChestType, "none">): LootResult {
   if (type === "obsidian") {
     return asLoot(
       rollWeighted([
-        { p:, 0.4, items: ["boots" as ArmorId] },
+        { p: 0.4, items: ["boots" as ArmorId] },
         { p: 0.3, items: ["pants" as ArmorId] },
         { p: 0.2, items: ["helm" as ArmorId] },
         { p: 0.1, items: ["chest" as ArmorId] },
