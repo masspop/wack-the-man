@@ -1,4 +1,5 @@
-  import "./style.css";
+import "./style.css";
+
 type Rect = { x: number; y: number; w: number; h: number };
 type Scene = "world" | "interior";
 type EnemyKind = "goblin" | "bruiser" | "bat" | "boss";
@@ -263,7 +264,277 @@ const COSMETICS: Record<CosmeticId, CosmeticDef> = {
   },
   ig_pants: {
     id: "ig_pants",
-    label: "Instagram Renkli Pantolon",  sphinx: 4300,
+    label: "Instagram Renkli Pantolon",
+    slot: "pants",
+    colors: { a: "#f58529", b: "#dd2a7b", c: "#8134af", d: "#515bd4" },
+  },
+  youtube_skin: {
+    id: "youtube_skin",
+    label: "YouTube Skin",
+    slot: "skin",
+    colors: { skin: "#c47a5a", accent: "#ff0000" },
+  },
+  metal_armor_pants: {
+    id: "metal_armor_pants",
+    label: "Metal Zırh Pantolon",
+    slot: "pants",
+    colors: { pants: "#8a949e", rim: "#c0c8d0" },
+  },
+  gold_armor_boots: {
+    id: "gold_armor_boots",
+    label: "Altın Zırh Ayakkabı",
+    slot: "boots",
+    colors: { boots: "#d4a017", shine: "#ffe08a" },
+  },
+  emerald_gloves: {
+    id: "emerald_gloves",
+    label: "Zümrüt Eldiven",
+    slot: "hands",
+    colors: { hands: "#2ecc71", gem: "#7dffb3" },
+  },
+  diamond_chest: {
+    id: "diamond_chest",
+    label: "Elmas Göğüslük Zırh",
+    slot: "body",
+    colors: { body: "#9ad8ff", shine: "#e8f6ff", rim: "#5aa0d0" },
+  },
+  obsidian_helm: {
+    id: "obsidian_helm",
+    label: "Obsidyen Şövalye Kaskı",
+    slot: "helm",
+    colors: { helm: "#1a1020", visor: "#4a2060", glow: "#a44dff" },
+  },
+  red_bowtie: {
+    id: "red_bowtie",
+    label: "Kırmızı Papyon",
+    slot: "face",
+    colors: { bow: "#e04040", knot: "#8a1010" },
+  },
+  rainbow_tux: {
+    id: "rainbow_tux",
+    label: "Rengarenk Smokin",
+    slot: "body",
+    colors: {
+      a: "#ff3a3a",
+      b: "#fbbc05",
+      c: "#34a853",
+      d: "#4285f4",
+      e: "#9146ff",
+    },
+  },
+  slot_token: {
+    id: "slot_token",
+    label: "Elde Slot Tokenı",
+    slot: "held",
+    colors: { coin: "#f5c518", face: "#111" },
+  },
+  rainbow_skin: {
+    id: "rainbow_skin",
+    label: "Rengarenk Skin",
+    slot: "skin",
+    colors: { a: "#ff7ad9", b: "#7dffb3", c: "#9ad1ff" },
+  },
+};
+
+type LootEntry = { id: CosmeticId | null; weight: number; label: string };
+
+const SHOP_CHESTS: Record<
+  ShopChestId,
+  {
+    label: string;
+    priceCoins: number;
+    priceUsd: number;
+    blurb: string;
+    theme: "detroit" | "google" | "knight" | "gamble";
+    loot: LootEntry[];
+  }
+> = {
+  detroit: {
+    label: "Detroit Sandığı",
+    priceCoins: 13,
+    priceUsd: 65,
+    blurb: "Detroit neon · android grafik stili",
+    theme: "detroit",
+    loot: [
+      { id: "elec_tshirt", weight: 18, label: "Elektrikli Tişört" },
+      { id: "blue_laser_glasses", weight: 5, label: "Mavi Lazerli Gözlük" },
+      { id: "elec_tattoo", weight: 24, label: "Elektrik Dövmesi" },
+      { id: "grey_shoes", weight: 45, label: "Gri Ayakkabı" },
+      { id: "elec_poop", weight: 8, label: "Elektrikli Bok" },
+    ],
+  },
+  google: {
+    label: "Google Sandığı",
+    priceCoins: 31,
+    priceUsd: 153,
+    blurb: "Üstünde Google logosu",
+    theme: "google",
+    loot: [
+      { id: "twitch_shoes", weight: 27, label: "Twitch Logolu Ayakkabı" },
+      { id: "pink_heart_crown", weight: 39, label: "Kalpli Pembe Taç" },
+      { id: "google_hoodie", weight: 14, label: "Google Logolu Hoodie" },
+      { id: "ig_pants", weight: 15, label: "Instagram Pantolon" },
+      { id: "youtube_skin", weight: 5, label: "YouTube Skin" },
+    ],
+  },
+  knight: {
+    label: "OnurluYaşamışŞövalye Sandığı",
+    priceCoins: 46,
+    priceUsd: 230,
+    blurb: "Zırh maddesi · tepesinde çimen & papatya",
+    theme: "knight",
+    loot: [
+      { id: "metal_armor_pants", weight: 43, label: "Metal Zırh Pantolon" },
+      { id: "gold_armor_boots", weight: 24, label: "Altın Zırh Ayakkabı" },
+      { id: "emerald_gloves", weight: 15, label: "Zümrüt Eldiven" },
+      { id: "diamond_chest", weight: 14, label: "Elmas Göğüslük" },
+      { id: "obsidian_helm", weight: 4, label: "Obsidyen Kask" },
+    ],
+  },
+  gamble: {
+    label: "Gamble Sandığı",
+    priceCoins: 21,
+    priceUsd: 105,
+    blurb: "Rengarenk · üstünde kumar tokenı · %50 boş",
+    theme: "gamble",
+    loot: [
+      { id: null, weight: 50, label: "BOŞ" },
+      { id: "red_bowtie", weight: 25, label: "Kırmızı Papyon" },
+      { id: "rainbow_tux", weight: 15, label: "Rengarenk Smokin" },
+      { id: "slot_token", weight: 7, label: "Slot Tokenı" },
+      { id: "rainbow_skin", weight: 3, label: "Rengarenk Skin" },
+    ],
+  },
+};
+
+const DEFAULT_LOOK = {
+  cape: "#8a2030",
+  body: "#5a6578",
+  pants: "#3a4558",
+  boots: "#2a2a32",
+  helm: "#4a5568",
+  skin: "#e8b896",
+  accent: "#c9a227",
+};
+
+const WEAPON_BASE: Record<WeaponId, number> = {
+  fist: 25,
+  knife: 80,
+  axe: 115,
+  rifle: 190,
+  sword: 260,
+  lava: 295,
+  staff: 380,
+};
+
+const WEAPONS: Record<
+  WeaponId,
+  { label: string; cooldown: number; range: number; ammoMax: number }
+> = {
+  fist: { label: "Yumruk", cooldown: 0.28, range: 34, ammoMax: 0 },
+  knife: { label: "Çakı", cooldown: 0.12, range: 36, ammoMax: 0 },
+  axe: { label: "Balta", cooldown: 0.45, range: 42, ammoMax: 0 },
+  rifle: { label: "Tüfek", cooldown: 0.4, range: 320, ammoMax: 5 },
+  sword: { label: "Kılıç", cooldown: 0.28, range: 44, ammoMax: 0 },
+  lava: { label: "Lav Silahı", cooldown: 0.35, range: 120, ammoMax: 0 },
+  staff: { label: "Büyülü Asa", cooldown: 0.38, range: 280, ammoMax: 0 },
+};
+
+const POTIONS: Record<PotionId, { label: string; color: string; hint: string }> =
+  {
+    heal: {
+      label: "Recovery",
+      color: "#3dff7a",
+      hint: "Yeşil · iç · +200–350 can",
+    },
+    poison: {
+      label: "Krypton",
+      color: "#ff3a3a",
+      hint: "Kırmızı · at · düşmana 250–300",
+    },
+    fly: {
+      label: "Pigeon",
+      color: "#4aa8ff",
+      hint: "Mavi · iç · 5 sn uçuş",
+    },
+    purple: {
+      label: "Enchant",
+      color: "#b44dff",
+      hint: "Mor · yere at · eşyanın üstüne dök",
+    },
+    yellow: {
+      label: "TheReeker",
+      color: "#ffd24a",
+      hint: "Sarı · iç · 8 sn görünmezlik",
+    },
+    pink: {
+      label: "Splındog",
+      color: "#ff7ad9",
+      hint: "Pembe · yere at · 2 asalı müttefik",
+    },
+  };
+
+/** drink = içilen · throw = atılan · ground = yere atılıp dökülen/çağırılan */
+const POTION_USE: Record<PotionId, "drink" | "throw" | "ground"> = {
+  heal: "drink",
+  fly: "drink",
+  yellow: "drink",
+  poison: "throw",
+  purple: "ground",
+  pink: "ground",
+};
+
+type ThrownBottle = {
+  id: PotionId;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  w: number;
+  h: number;
+  color: string;
+  life: number;
+  spin: number;
+  alive: boolean;
+};
+
+const ARMOR_BLOCK: Record<ArmorSlot, number> = {
+  helm: 0.45,
+  chest: 0.6,
+  pants: 0.35,
+  boots: 0.25,
+};
+
+const ARMOR_LABEL: Record<ArmorSlot, string> = {
+  helm: "Miğfer",
+  chest: "Göğüslük",
+  pants: "Pantolon",
+  boots: "Çizme",
+};
+
+const BOSS_ORDER: BossKind[] = [
+  "ironface",
+  "cloud",
+  "mothman",
+  "anaconda",
+  "kingkong",
+  "firefox",
+  "minotaur",
+  "creeper",
+  "sphinx",
+  "cerberus",
+];
+
+const BOSS_HP: Record<BossKind, number> = {
+  ironface: 700,
+  cloud: 800,
+  mothman: 1000,
+  anaconda: 1300,
+  kingkong: 1700,
+  firefox: 2200,
+  minotaur: 2800,
+    creeper: 3500,
+  sphinx: 4300,
   cerberus: 5400,
 };
 
@@ -5502,535 +5773,6 @@ function drawHazards() {
     }
   }
 }
-function drawPlatTraps() {
-  for (const t of platTraps) {
-    const x = t.x - camX;
-    if (x + t.w < -10 || x > W + 10) continue;
-    ctx.fillStyle = "#4a3030";
-    ctx.fillRect(x, t.y + 8, t.w, 4);
-    ctx.fillStyle = "#c0c8d0";
-    const spikes = 5;
-    for (let i = 0; i < spikes; i++) {
-      const sx = x + 3 + i * ((t.w - 6) / (spikes - 1));
-      ctx.beginPath();
-      ctx.moveTo(sx, t.y + 10);
-      ctx.lineTo(sx + 3, t.y);
-      ctx.lineTo(sx + 6, t.y + 10);
-      ctx.fill();
-    }
-  }
-}
-
-function drawGroundDrops() {
-  for (const d of groundDrops) {
-    const x = d.x - camX;
-    const y = d.y + Math.sin(d.bob) * 3;
-    if (x < -40 || x > W + 40) continue;
-    if (d.kind === "weapon") {
-      ctx.fillStyle = "#6a4a28";
-      ctx.fillRect(x, y + 6, d.w, 6);
-      ctx.fillStyle = "#c0d0e0";
-      ctx.fillRect(x + 4, y + 2, d.w - 6, 4);
-    } else {
-      ctx.fillStyle = "#708090";
-      ctx.fillRect(x + 2, y, d.w - 4, d.h);
-      ctx.fillStyle = "#c9a227";
-      ctx.fillRect(x + 4, y + 6, d.w - 8, 3);
-    }
-    if (d.enchanted || d.sparkle > 0) {
-      const pulse = 0.4 + Math.sin(time * 14) * 0.35;
-      ctx.fillStyle = `rgba(180,77,255,${pulse})`;
-      ctx.fillRect(x + 2, y - 4, 3, 3);
-      ctx.fillRect(x + d.w - 6, y + 2, 3, 3);
-      ctx.fillRect(x + d.w / 2, y + d.h, 2, 2);
-    }
-  }
-}
-
-function drawAllies() {
-  for (const a of allies) {
-    if (!a.alive) continue;
-    const x = a.x - camX;
-    const y = a.y;
-    if (x + a.w < -20 || x > W + 20) continue;
-    ctx.fillStyle = "#4a3068";
-    ctx.fillRect(x + 4, y + 14, 14, 16);
-    ctx.fillStyle = "#e8b896";
-    ctx.fillRect(x + 5, y + 2, 12, 12);
-    ctx.fillStyle = "#ff7ad9";
-    ctx.fillRect(x + 4, y, 14, 4);
-    // magic staff
-    const sx = a.facing > 0 ? x + 16 : x - 2;
-    ctx.fillStyle = "#6a4080";
-    ctx.fillRect(sx, y + 4, 3, 26);
-    ctx.fillStyle = "#b44dff";
-    ctx.beginPath();
-    ctx.arc(sx + 1, y + 4, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(180,77,255,${0.4 + Math.sin(time * 10) * 0.3})`;
-    ctx.fillRect(sx - 1, y + 2, 2, 2);
-    ctx.fillStyle = "#1a1010";
-    ctx.fillRect(x + 2, y - 6, a.w - 4, 3);
-    ctx.fillStyle = "#ff7ad9";
-    ctx.fillRect(x + 2, y - 6, (a.w - 4) * (a.hp / a.maxHp), 3);
-  }
-}
-
-function drawThrownBottles() {
-  for (const b of thrownBottles) {
-    if (!b.alive) continue;
-    const x = b.x - camX;
-    const y = b.y;
-    drawPotionBottle(x + b.w / 2, y + b.h / 2, b.color, 1.15, b.spin);
-    // trail droplets
-    ctx.fillStyle = b.color;
-    ctx.globalAlpha = 0.3;
-    ctx.beginPath();
-    ctx.arc(x - b.vx * 0.02 + 4, y - b.vy * 0.02 + 4, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-}
-
-function drawPotionFx() {
-  if (pourAnimT > 0) {
-    const x = pourAnimX - camX;
-    const y = pourAnimY;
-    drawPotionBottle(x, y - 30, "#b44dff", 1.25, 0.85);
-    ctx.strokeStyle = `rgba(180,77,255,${0.55 + Math.sin(time * 20) * 0.3})`;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(x + 6, y - 18);
-    ctx.quadraticCurveTo(
-      x + 4 + Math.sin(time * 28) * 4,
-      y - 8,
-      x + Math.sin(time * 22) * 2,
-      y,
-    );
-    ctx.stroke();
-    ctx.fillStyle = "rgba(180,77,255,0.55)";
-    ctx.beginPath();
-    ctx.arc(x + Math.sin(time * 22) * 2, y + 2, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-function drawProjectiles() {
-  for (const p of projectiles) {
-    if (!p.alive) continue;
-    const x = p.x - camX;
-    if (p.kind === "arrow" || p.kind === "horn") {
-      ctx.fillStyle = "#d0c090";
-      ctx.fillRect(x, p.y + 2, p.w, 3);
-      ctx.fillStyle = "#888";
-      ctx.fillRect(x + (p.vx >= 0 ? p.w - 4 : 0), p.y, 4, 6);
-    } else if (p.kind === "club") {
-      ctx.save();
-      ctx.translate(x + p.w / 2, p.y + p.h / 2);
-      ctx.rotate(time * 10 * (p.vx >= 0 ? 1 : -1));
-      ctx.fillStyle = "#6a4020";
-      ctx.fillRect(-3, -8, 6, 16);
-      ctx.fillStyle = "#8a9098";
-      ctx.beginPath();
-      ctx.arc(0, -9, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c0c8d0";
-      ctx.fillRect(-4, -12, 3, 3);
-      ctx.fillRect(1, -11, 3, 3);
-      ctx.restore();
-    } else if (p.kind === "spit") {
-      ctx.fillStyle = "#7dffb3";
-      ctx.beginPath();
-      ctx.arc(x + 5, p.y + 5, 5, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (p.kind === "rain") {
-      ctx.fillStyle = "#7ab0ff";
-      ctx.fillRect(x + 2, p.y, 4, 12);
-    } else if (p.kind === "poison") {
-      ctx.fillStyle = "#ff3a3a";
-      ctx.beginPath();
-      ctx.arc(x + 7, p.y + 5, 6, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (p.kind === "bullet") {
-      ctx.fillStyle = "#f5c518";
-      ctx.fillRect(x, p.y + 1, p.w, 4);
-    } else if (p.kind === "fire" || p.kind === "breath") {
-      ctx.fillStyle = "#ff5020";
-      ctx.beginPath();
-      ctx.arc(x + 8, p.y + 6, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ffd24a";
-      ctx.beginPath();
-      ctx.arc(x + 8, p.y + 6, 4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (p.kind === "magic" || p.kind === "bolt") {
-      ctx.fillStyle = "#b44dff";
-      ctx.beginPath();
-      ctx.arc(x + 7, p.y + 7, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(x + 5, p.y + 4, 4, 6);
-    } else if (p.kind === "cotton") {
-      ctx.fillStyle = "#f4f0e8";
-      ctx.beginPath();
-      ctx.arc(x + 6, p.y + 6, 7, 0, Math.PI * 2);
-      ctx.arc(x + 12, p.y + 5, 5, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (p.kind === "blade") {
-      ctx.fillStyle = "#c0d0e0";
-      ctx.save();
-      ctx.translate(x + 9, p.y + 9);
-      ctx.rotate(time * 18);
-      ctx.fillRect(-10, -2, 20, 4);
-      ctx.fillRect(-2, -10, 4, 20);
-      ctx.restore();
-    } else if (p.kind === "head") {
-      ctx.fillStyle = "#3a5030";
-      ctx.fillRect(x, p.y, p.w, p.h);
-      ctx.fillStyle = "#80ff60";
-      ctx.fillRect(x + 4, p.y + 6, 4, 4);
-      ctx.fillRect(x + 12, p.y + 6, 4, 4);
-    } else if (p.kind === "spike") {
-      ctx.fillStyle = "#c9a060";
-      ctx.beginPath();
-      ctx.moveTo(x + 5, p.y);
-      ctx.lineTo(x + 10, p.y + p.h);
-      ctx.lineTo(x, p.y + p.h);
-      ctx.fill();
-    } else if (p.kind === "anvil") {
-      ctx.fillStyle = "#4a4a50";
-      ctx.fillRect(x, p.y + 8, p.w, p.h - 8);
-      ctx.fillRect(x + 4, p.y, p.w - 8, 10);
-    } else if (p.kind === "spark") {
-      ctx.fillStyle = "#ffd24a";
-      ctx.fillRect(x, p.y, 4, 4);
-    } else {
-      ctx.fillStyle = "#5dff7a";
-      ctx.beginPath();
-      ctx.arc(x + 6, p.y + 6, 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-function drawParticles() {
-  for (const p of particles) {
-    ctx.globalAlpha = Math.max(0, p.life * 2);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - camX, p.y, p.size, p.size);
-  }
-  ctx.globalAlpha = 1;
-}
-
-function resetGame() {
-  level = 1;
-  Object.assign(player, {
-    x: 80,
-    y: GROUND_Y - 52,
-    vx: 0,
-    vy: 0,
-    hp: PLAYER_MAX_HP,
-    maxHp: PLAYER_MAX_HP,
-  });
-  // coins + costumes persist in localStorage — do not wipe bank
-  inventory.key = false;
-  inventory.medallion = false;
-  leftHand.item = null;
-  rightHand.item = null;
-  bag[0] = null;
-  bag[1] = null;
-  bag[2] = null;
-  armor.helm = false;
-  armor.chest = false;
-  armor.pants = false;
-  armor.boots = false;
-  for (const k of Object.keys(weaponBonus) as WeaponId[]) weaponBonus[k] = 0;
-  for (const k of Object.keys(weaponEnchanted) as WeaponId[])
-    weaponEnchanted[k] = false;
-  for (const k of Object.keys(armorEnchant) as ArmorSlot[]) armorEnchant[k] = 0;
-  facing = 1;
-  invuln = 0;
-  attackT = 0;
-  attackCd = 0;
-  flyTimer = 0;
-  invisTimer = 0;
-  shieldHp = 0;
-  shieldTimer = 0;
-  venomDot = 0;
-  venomAcc = 0;
-  enchantSparkleT = 0;
-  drinkAnimT = 0;
-  drinkAnimId = null;
-  pourAnimT = 0;
-  potionBusy = false;
-  lootReveal = null;
-  houseRocketShown = false;
-  barChestSave = null;
-  projectiles.length = 0;
-  hazards.length = 0;
-  platTraps.length = 0;
-  groundDrops.length = 0;
-  allies.length = 0;
-  thrownBottles.length = 0;
-  camX = 0;
-  scene = "world";
-  currentInterior = null;
-  chest = null;
-  dialogQueue = [];
-  dialogEl.classList.remove("show");
-  buildWorld();
-  updateHud();
-  queueDialog([
-    {
-      name: "???",
-      text: "İçilen: Pigeon / TheReeker / Recovery. Atılan: Krypton. Yere atılan: Enchant / Splındog.",
-    },
-    { name: "SEN", text: "Kardeşimi bulacağım." },
-    {
-      name: "???",
-      text: "Enchant için eşyayı Q/G/U ile yere koy, iksiri üstüne at. Splındog asalı yoldaş çağırır.",
-    },
-  ]);
-}
-
-function frame(dt: number) {
-  time += dt;
-  if (shake > 0) shake = Math.max(0, shake - dt * 30);
-
-  if (lootReveal) {
-    updateLootReveal(dt);
-    handleInput(dt);
-    updateParticles(dt);
-    if (scene === "world") {
-      camX = player.x + player.w / 2 - W * 0.35;
-      camX = Math.max(0, Math.min(camX, WORLD_W - W));
-    } else camX = 0;
-  } else if (state === "playing" || state === "dialog" || state === "spectate") {
-    if (state === "playing") {
-      handleInput(dt);
-      resolvePlayer(dt);
-      tickVenomDot(dt);
-      updateEnemies(dt);
-      updateAllies(dt);
-      updateHazards(dt);
-      updatePlatTraps(dt);
-      updateItems(dt);
-      updateGroundDrops(dt);
-      updateProjectiles(dt);
-      updateThrownBottles(dt);
-      updatePotionAnims(dt);
-      updateBots(dt);
-    } else if (state === "spectate") {
-      updateEnemies(dt);
-      updateAllies(dt);
-      updateHazards(dt);
-      updatePlatTraps(dt);
-      updateProjectiles(dt);
-      updateThrownBottles(dt);
-      updatePotionAnims(dt);
-      updateBots(dt);
-      checkMpRoundEnd();
-    } else {
-      handleInput(dt);
-    }
-    updateParticles(dt);
-    invuln = Math.max(0, invuln - dt);
-
-    if (state !== "spectate") {
-      if (scene === "world") {
-        camX = player.x + player.w / 2 - W * 0.35;
-        camX = Math.max(0, Math.min(camX, WORLD_W - W));
-      } else {
-        camX = 0;
-      }
-    }
-
-    if (storyTimer > 0) {
-      storyTimer -= dt;
-      if (storyTimer <= 0) storyEl.classList.remove("show");
-    }
-    if (hintTimer > 0) {
-      hintTimer -= dt;
-      if (hintTimer <= 0) hintToast.classList.remove("show");
-    }
-
-    if (state === "playing") updateHud();
-  } else {
-    updateParticles(dt);
-  }
-
-  drawSky();
-  const ox = shake > 0 ? (Math.random() - 0.5) * shake : 0;
-  const oy = shake > 0 ? (Math.random() - 0.5) * shake : 0;
-  ctx.save();
-  ctx.translate(ox, oy);
-  drawHills();
-  if (scene === "interior") {
-    drawInteriorDecor();
-    drawPlatforms(interiorPlatforms);
-    drawGroundDrops();
-    drawAllies();
-  } else {
-    drawBuildings();
-    drawPlatforms(platforms);
-    drawPlatTraps();
-    drawHazards();
-    drawGroundDrops();
-    for (const it of items) drawWorldItem(it);
-    for (const e of enemies) drawEnemy(e);
-    drawAllies();
-  }
-  drawProjectiles();
-  drawThrownBottles();
-  drawPotionFx();
-  if (state !== "title" && state !== "spectate") drawPlayer();
-  if (state !== "title") drawMpPeers();
-  drawParticles();
-  ctx.restore();
-  drawLootReveal();
-}
-
-let last = performance.now();
-function loop(now: number) {
-  // Always reschedule first so one frame error cannot freeze the game.
-  requestAnimationFrame(loop);
-  try {
-    let dt = Math.min(0.033, (now - last) / 1000);
-    if (!Number.isFinite(dt) || dt < 0) dt = 1 / 60;
-    last = now;
-    frame(dt);
-  } catch (err) {
-    console.error("[Wack The Man] frame error:", err);
-  }
-}
-
-function startGame() {
-  playMode = "solo";
-  startGameWithMode("solo", []);
-}
-
-function restartFromOverlay() {
-  if (playMode !== "solo") {
-    returnToHub();
-    return;
-  }
-  ensureAudio();
-  hideOverlay();
-  resetGame();
-  setupMultiplayer([]);
-  state = dialogQueue.length ? "dialog" : "playing";
-  if (state === "dialog") showDialogLine();
-}
-
-window.addEventListener("keydown", (e) => {
-  keys.add(e.key);
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key))
-    e.preventDefault();
-  if (e.key === "r" || e.key === "R") {
-    if (state === "spectate" || (playMode !== "solo" && state === "dead")) {
-      returnToHub();
-      return;
-    }
-    if (
-      state === "playing" ||
-      state === "dead" ||
-      state === "win" ||
-      state === "dialog"
-    ) {
-      hideOverlay();
-      playMode = "solo";
-      resetGame();
-      setupMultiplayer([]);
-      state = dialogQueue.length ? "dialog" : "playing";
-      if (state === "dialog") showDialogLine();
-    }
-  }
-  if (e.key === "c" || e.key === "C") usePotion();
-  if ((e.key === "q" || e.key === "Q") && !e.repeat) dropLeftHand();
-  if ((e.key === "g" || e.key === "G") && !e.repeat) dropRightHand();
-  if ((e.key === "u" || e.key === "U") && !e.repeat) dropArmorPiece();
-  if (e.key === "Enter" && state === "title") startGame();
-});
-window.addEventListener("keyup", (e) => keys.delete(e.key));
-window.addEventListener("blur", () => keys.clear());
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    keys.clear();
-  } else {
-    last = performance.now();
-  }
-});
-
-document.querySelector("#btn-start")!.addEventListener("click", startGame);
-document
-  .querySelector("#btn-restart")!
-  .addEventListener("click", restartFromOverlay);
-document.querySelector("#btn-shop")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  openShop();
-});
-document.querySelector("#btn-shop-open")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  openShop();
-});
-document.querySelector("#btn-shop-close")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  closeShop();
-});
-shopPanel.addEventListener("pointerdown", (e) => {
-  if (e.target === shopPanel) closeShop();
-});
-document.querySelector("#btn-lobby")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  openLobby();
-});
-document.querySelector("#btn-lobby-close")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  closeLobby();
-});
-lobbyPanel.addEventListener("pointerdown", (e) => {
-  if (e.target === lobbyPanel) closeLobby();
-});
-document.querySelector("#btn-mode-peaceful")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  lobbyModePick = "peaceful";
-  refreshLobbyUi();
-});
-document.querySelector("#btn-mode-survivor")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  lobbyModePick = "survivor";
-  refreshLobbyUi();
-});
-document.querySelector("#btn-lobby-start")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  startLobbyMatch();
-});
-document.querySelector("#btn-room-host")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  hostRoom();
-});
-document.querySelector("#btn-room-join")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  joinRoom();
-});
-document.querySelector("#btn-auth-login")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  loginAccount();
-});
-document.querySelector("#btn-auth-register")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  registerAccount();
-});
-document.querySelector("#btn-friend-search")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  searchFriends();
-});
-friendSearchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    searchFriends();
-  }
-});
 function drawPlatTraps() {
   for (const t of platTraps) {
     const x = t.x - camX;
